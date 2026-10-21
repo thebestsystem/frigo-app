@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f6b47">
+  <title>Frigo · Fiche d’intervention</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f6b47'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='44' fill='white'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="eyebrow"><strong>FRIGO</strong><span>Assistant Cerfa 15497</span></div>
+    <p id="offline" class="notice" role="status" hidden>Hors connexion</p>
+    <div class="heading"><h1 id="title" tabindex="-1">1. Équipement</h1><span id="step-label">Étape 1 sur 3</span></div>
+    <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
+    <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
+  </header>
+  <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
+  <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
+  <form id="intervention-form" novalidate>
+    <section data-step="1" aria-labelledby="title">
+      <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
+      <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
+      <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
+      <fieldset><legend>4. Fluide frigorigène</legend><div class="choices"><label><input type="radio" name="fluide" value="R32" required><span>R32</span></label><label><input type="radio" name="fluide" value="R410A"><span>R410A</span></label></div></fieldset>
+      <div class="field"><label for="chargeTotale">5. Charge totale (kg)</label><div class="stepper"><button type="button" id="minus" aria-label="Diminuer la charge de 0,1 kg">−</button><input id="chargeTotale" name="chargeTotale" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="0,0" required><button type="button" id="plus" aria-label="Augmenter la charge de 0,1 kg">+</button></div></div>
+      <div class="actions"><button class="primary" type="submit">Suivant <span aria-hidden="true">→</span></button></div>
+    </section>
+    <section data-step="2" aria-labelledby="title" hidden>
+      <fieldset><legend>Type d’opération</legend><div class="choices vertical"><label><input type="radio" name="typeOperation" value="Mise en service" required><span>Mise en service</span></label><label><input type="radio" name="typeOperation" value="Maintenance"><span>Maintenance</span></label><label><input type="radio" name="typeOperation" value="Démontage"><span>Démontage</span></label></div></fieldset>
+      <div class="field"><label for="date">Date</label><input id="date" name="date" type="date" required></div>
+      <div class="field"><label for="poidsAvant">Poids bouteille avant (kg)</label><input id="poidsAvant" name="poidsAvant" type="number" inputmode="decimal" min="0.01" step="0.01" required></div>
+      <div class="field"><label for="poidsApres">Poids bouteille après (kg)</label><input id="poidsApres" name="poidsApres" type="number" inputmode="decimal" min="0" step="0.01" required></div>
+      <div class="field"><label for="chargeRecuperee">Charge récupérée (kg)</label><input id="chargeRecuperee" readonly value="—" aria-live="polite"><small>Poids avant − poids après</small></div>
+      <div class="field"><label for="longueurCircuit">Longueur de circuit (m, optionnel)</label><input id="longueurCircuit" name="longueurCircuit" type="number" inputmode="decimal" min="0" step="0.1"></div>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Suivant →</button></div>
+    </section>
+    <section data-step="3" aria-labelledby="title" hidden>
+      <div class="field"><label for="nomSignataire">Nom du signataire</label><input id="nomSignataire" name="nomSignataire" autocomplete="name" required></div>
+      <div class="field"><label id="signature-label" for="signature">Signature au doigt ou à la souris</label><canvas id="signature" width="700" height="360" tabindex="0" aria-labelledby="signature-label" aria-describedby="signature-help">La signature nécessite un navigateur compatible canvas.</canvas><small id="signature-help">Tracez votre signature dans le cadre.</small><button id="clear-signature" type="button">Effacer</button></div>
+      <h2>Récapitulatif</h2><dl id="summary"></dl>
+      <p class="hint">Document de travail — ne remplace pas le Cerfa officiel signé</p>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
+    </section>
+  </form>
+  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
+  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
+</div>
+</body>
+</html>

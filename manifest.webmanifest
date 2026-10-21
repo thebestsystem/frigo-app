@@ -1,0 +1,25 @@
+{
+  "id": "./",
+  "name": "Frigo · Assistant Cerfa 15497",
+  "short_name": "Frigo",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f9ff",
+  "theme_color": "#0f6b47",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%2296%22%20fill%3D%22%230f6b47%22%2F%3E%3Cpath%20d%3D%22M160%20360V152h192v48H216v40h112v48H216v72Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%2296%22%20fill%3D%22%230f6b47%22%2F%3E%3Cpath%20d%3D%22M160%20360V152h192v48H216v40h112v48H216v72Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
