@@ -1,6 +1,7 @@
-// Service worker : app shell en cache, mise à jour propre.
-// Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
-const CACHE = 'frigo-shell-v3';
+// Service worker : app shell en cache, mise à jour sans manœuvre manuelle.
+// Stratégie : réseau d'abord pour HTML/JS/CSS (une correction déployée arrive au
+// rechargement suivant), cache en secours pour tenir hors ligne.
+const CACHE = 'frigo-shell-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +14,7 @@ const ASSETS = [
   './js/settings.js',
   './manifest.webmanifest',
 ];
+const NETWORK_FIRST = /\/(index\.html)?$|\.(js|css|webmanifest)$/i;
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -33,33 +35,37 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Navigation : réseau d'abord, cache en secours (fonctionne hors ligne).
-  if (request.mode === 'navigate') {
+  const networkFirst = request.mode === 'navigate' || NETWORK_FIRST.test(url.pathname);
+
+  if (networkFirst) {
     event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
       try {
         const fresh = await fetch(request);
-        const cache = await caches.open(CACHE);
-        cache.put('./index.html', fresh.clone());
+        if (fresh && fresh.status === 200) {
+          cache.put(request.mode === 'navigate' ? './index.html' : request, fresh.clone());
+        }
         return fresh;
       } catch {
-        const cache = await caches.open(CACHE);
-        return (await cache.match('./index.html')) || (await cache.match('./')) || Response.error();
+        const hit = (request.mode === 'navigate')
+          ? (await cache.match('./index.html')) || (await cache.match('./'))
+          : await cache.match(request);
+        return hit || Response.error();
       }
     })());
     return;
   }
 
-  // Ressources : cache d'abord, réseau ensuite.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const hit = await cache.match(request);
     if (hit) return hit;
     try {
       const fresh = await fetch(request);
-      if (fresh && fresh.status === 200 && fresh.type === 'basic') {
-        cache.put(request, fresh.clone());
-      }
+      if (fresh && fresh.status === 200 && fresh.type === 'basic') cache.put(request, fresh.clone());
       return fresh;
     } catch {
       return Response.error();
