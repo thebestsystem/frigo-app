@@ -8,88 +8,110 @@ approval: never
 sandbox: danger-full-access
 reasoning effort: medium
 reasoning summaries: none
-session id: 01a1688f-cec0-71d3-acda-ad74eada3d08
+session id: 01a16890-51bc-72d1-a4dc-305de3a0fc60
 --------
 user
-Lis SPEC2.md à la racine et implémente-la intégralement en conservant l'existant (les 6 tests actuels doivent rester verts). Contraintes : zéro dépendance npm, JS natif, tests node --test, fetch injectable, aucun appel réseau implicite. Boucle jusqu'à ce que 'node --test' affiche 14 tests et 0 échec. Vérifie ensuite la Definition of Done. Réponse finale concise : fichiers créés/modifiés, sortie exacte de node --test, et ce que tu n'as pas pu vérifier.
+Lis SPEC2.md à la racine et implémente-la intégralement. L'API TrackDéchets est GraphQL (section 0 de la spec est correcte et fait foi : ne construis PAS un POST REST métier). Conserve les 6 tests existants. Contraintes : zéro dépendance npm, JS natif, tests node --test, fetch injectable, aucun appel réseau implicite, nouveaux modules ajoutés au cache du service worker. Boucle jusqu'à 'node --test' = 14 tests, 0 échec, puis vérifie la Definition of Done. Réponse finale concise : fichiers créés/modifiés, sortie exacte de node --test, points non vérifiés.
 codex
-Je vais lire `SPEC2.md` et les consignes du dépôt, puis implémenter et tester jusqu’à obtenir 14 tests sans échec. Je vérifierai ensuite la Definition of Done.
-
+Je vais lire `SPEC2.md`, examiner les six tests existants et implémenter la spec, puis exécuter les tests et vérifier la Definition of Done.
 exec
-/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g 'SPEC2.md' -g 'package.json' -g '*test*' -g 'SKILL.md'" in /data/.hermes/home/frigo/app
+/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g 'SPEC2.md' -g 'package.json' -g '*test*' -g '*sw*' -g '*service*'" in /data/.hermes/home/frigo/app
  succeeded in 0ms:
 /data/.hermes/home/frigo/app
-SPEC2.md
 package.json
+sw.js
+SPEC2.md
 tests/model.test.js
 
 exec
-/bin/bash -lc 'cat /data/.hermes/home/.codex/plugins/cache/openai-curated-remote/cloud-environment/0.1.2/skills/runtime/SKILL.md' in /data/.hermes/home/frigo/app
+/bin/bash -lc 'cat SPEC2.md' in /data/.hermes/home/frigo/app
  succeeded in 0ms:
----
-name: cloud-environment-runtime
-description: Read at the start of work in a managed cloud environment. Inspect network policy and configured credentials; build and run Docker containers with the session proxy and CA trust; use Tailscale VPN access, configure TCP forwarding, and diagnose access failures.
----
+# SPEC v2 — Frigo : document imprimable, bilan F-Gas, brouillon TrackDéchets
 
-Read this skill at the start of work in a managed cloud environment, including
-resumed work. Before building or running Docker containers, read
-[Docker in Docker](references/docker.md) and follow its proxy and CA guidance.
+Le socle existe (3 étapes, signature, file locale, hors ligne, 6 tests verts).
+Cette version ajoute de quoi rendre l'outil utilisable, **sans backend** et **sans dépendance npm**.
 
-Use `cloud_environment.environment_status` at the start of work in a managed cloud
-environment and when diagnosing network or authentication failures. It takes no
-arguments. The runtime selects the instance and checks access as the task's actor.
-The result describes the thread's managed instance; it does not describe extra
-attached environments or the latest editable configuration draft.
+## 0. Contrainte corrigée : l'API TrackDéchets est en GraphQL
+L'API Trackdéchets n'accepte **pas** un POST REST avec un objet métier. C'est un endpoint
+**GraphQL** unique, authentifié par `Authorization: Bearer <token>`, avec `{ query, variables }`.
 
-Before network work, read [Cloud environment networking](references/networking.md)
-and inspect the selected executor's `/etc/codex/network-policy.json`. If the
-supported policy snapshot reports `vpn_configured: true`, also read
-[Tailscale VPN access](references/vpn.md). The flag indicates configuration,
-not VPN health. Also read the VPN reference when explicitly diagnosing VPN access,
-even if the flag is missing or false. `environment_status` reports HTTP policy
-and credential readiness, not TCP grants or VPN health.
+Deux mutations nous concernent :
+- `createDraftBsff(input: BsffInput!)` : seuls le `type` et un SIRET sont requis → c'est ce que
+  le technicien peut faire sur chantier.
+- `createFicheIntervention(...)` : reporte les données d'une fiche d'intervention papier
+  (détenteur, équipement, fluides) et peut ensuite être rattachée à un BSFF.
 
-Use the returned network policy, secret bindings, runtime variable names, and
-outbound identity aliases to plan commands. Do not print credential values, dump
-the process environment, or inspect secret files to discover their contents.
-A configured variable may hold a proxy placeholder; that alone does not mean its
-credential is missing. Use the configured SDK or CLI normally.
+La mutation `createBsff` complète exige transporteur, destination, emballages et poids :
+**hors périmètre terrain**. On ne l'implémente pas. Le bureau complète le brouillon ensuite
+dans TrackDéchets.
 
-Treat desired configuration and observed readiness separately. Require
-`observations_current: true` and the individual state `ready` before treating a
-secret, runtime variable, or outbound identity as ready. Network policy is applied
-only when its current state is `enforced`. Missing or any other states, including
-`skipped` and `unsupported`, do not establish readiness. Recheck after setup
-completes. Ready observations describe setup, not guaranteed authorization for
-every remote API call. Diagnose the actual command's error too.
+Endpoints :
+- bac à sable : `https://api.sandbox.trackdechets.beta.gouv.fr`
+- production : `https://api.trackdechets.beta.gouv.fr`
 
-For CLI or SDK profile selection, read the worker's non-secret JSON manifest at
-`OIC_MANIFEST_PATH`, if present. Version 1 contains a `connections` list. Select
-the entry whose `alias` matches the identity needed for the task; `is_default`
-identifies the provider's default, not necessarily the intended identity. Use the
-selected entry's fields to set these environment variables for that command only:
+## 1. Document imprimable (`js/cerfa.js`)
+- `buildCerfaHtml(intervention, company)` → HTML autonome A4 portrait, styles inline :
+  détenteur de l'équipement (client), opérateur (entreprise + SIRET), équipement
+  (marque, modèle, n° série, fluide, charge), intervention (type, date, poids avant/après,
+  charge récupérée, longueur circuit), bloc signature (image data URL + nom), et en pied la mention
+  **« Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé. »**
+- `printDoc(html)` côté UI : ouvre une fenêtre, y écrit le HTML, appelle `print()`.
+  Aucune bibliothèque PDF, aucun appel réseau.
+- Impression : marges 12 mm, texte ≥ 9 pt, tableau mesures lisible en noir et blanc, pas de bouton imprimé.
 
-| `provider_kind` | Environment variable ← manifest field |
-| --- | --- |
-| `azure` | `IDENTITY_ENDPOINT` ← `identity_endpoint`; `AZURE_CONFIG_DIR` ← `config_dir` |
-| `aws` | `AWS_PROFILE` ← `alias`; `AWS_CONFIG_FILE` ← `config_file` |
-| `gcp` | `CLOUDSDK_CONFIG` ← `config_dir`; `CLOUDSDK_ACTIVE_CONFIG_NAME` ← `configuration_name`; `GOOGLE_APPLICATION_CREDENTIALS` ← `credentials_file` |
+## 2. Bilan F-Gas (`js/bilan.js`)
+- `aggregateBilan(interventions, year)` → `{ year, count, byFluid: { R32: {n, kg}, R410A: {n, kg} }, totalKg }`.
+  On ne compte que les interventions de l'année, `status !== "draft"`, fluide connu.
+- `buildBilanHtml(bilan, company)` → document imprimable : lignes (date, client, fluide, kg) + totaux.
 
-Preserve the inherited runtime authentication headers and guard variables. Use
-credential file paths as selectors without reading or printing their contents.
-Do not invent aliases, replace injected credentials, or start interactive login
-merely because a token is not visible. Inspect the entry's `setup` outcome when
-diagnosing CLI failures; a warning does not establish successful CLI setup. If
-the manifest version, required entry, or selector fields are unavailable or
-unsupported, report the missing setup instead of silently using another identity.
+## 3. Client TrackDéchets (`js/trackdechets.js`)
+- `buildDraftBsffVariables(intervention, company)` → `{ input: { type: "BSFF", emitter: { company: { siret, name, contact, phone, mail, address } } } }`,
+  sans aucune valeur `undefined` (champs inconnus omis, pas mis à `null` sans raison).
+- `GRAPHQL_CREATE_DRAFT_BSFF` : la mutation en texte, avec `Bsff` et son `id` en sélection.
+- `sendDraftBsff(intervention, company, options)` avec
+  `options = { token, endpoint, dryRun, fetchImpl }` :
+  - `dryRun` (défaut) → `{ ok: true, dryRun: true, body }`, **aucun appel réseau** ;
+  - token absent → `{ ok: false, error: "jeton TrackDéchets manquant" }`, aucun appel réseau ;
+  - réel → `POST endpoint` en JSON `{ query, variables }`, en-têtes `Authorization: Bearer` et `Content-Type: application/json` ;
+    gère 200 avec `errors` GraphQL → `ok: false` et message ; 200 sans erreur → `{ ok: true, id }` ;
+    400/401/500 → `ok: false` avec le message serveur.
+- `fetchImpl` injectable : les tests ne font aucun réseau.
 
-This plugin reads runtime context. Configuration changes require the environment
-configuration workflow and its user review. If the tool reports no attached
-managed environment, do not reuse an instance ID or readiness result from a prior
-turn.
+## 4. Interface
+- Onglet **Réglages** : SIRET, nom, contact, téléphone, email, adresse de l'entreprise ;
+  jeton TrackDéchets (champ masqué + case afficher) ; environnement Bac à sable | Production ;
+  case **Mode simulation** cochée par défaut. Persistance `localStorage` clé `frigo.settings.v1`.
+- Écran de confirmation : boutons **« Exporter en PDF »**, **« Bilan F-Gas »**,
+  **« Créer le brouillon TrackDéchets »**. Statut par intervention :
+  `status: "pending" | "draft-created" | "error"`, plus `lastError`, `sentAt`, `trackdechetsId`, persistés.
+- Écran 1 : compteur « N en attente · M brouillons créés · K erreurs ».
+
+## 5. Tests (6 existants + 8 nouveaux = 14, tous verts)
+7. `buildCerfaHtml` contient marque, fluide, charge récupérée, nom du signataire et la mention obligatoire.
+8. `aggregateBilan` sur 3 interventions (2 en 2026, 1 en 2025) → compte 2, totaux par fluide exacts.
+9. `buildDraftBsffVariables` : `input.type === "BSFF"`, SIRET présent, aucune valeur `undefined` (test récursif).
+10. `sendDraftBsff` en `dryRun` → `ok: true`, `dryRun: true`, `fetchImpl` **jamais appelé**.
+11. `sendDraftBsff` sans token → `ok: false`, message explicite, aucun appel réseau.
+12. `sendDraftBsff` avec `fetchImpl` renvoyant 200 + `{data:{createDraftBsff:{id:"bsff_1"}}}` → `ok: true`, `id` remonté, corps envoyé conforme (`query` + `variables`).
+13. `sendDraftBsff` avec `fetchImpl` renvoyant 200 + `{errors:[{message:"SIRET invalide"}]}` → `ok: false`, message remonté.
+14. Migration : intervention ancien format (sans `status`) lue comme `status: "pending"`.
+
+## Definition of Done
+- `node --test` : **14 tests, 0 échec** (les 6 d'origine inclus).
+- Navigateur : parcours complet → « Exporter en PDF » affiche un document conforme et imprimable ;
+  « Bilan F-Gas » liste l'intervention ; « Créer le brouillon » en simulation affiche `dry-run`
+  **sans aucune requête réseau** (vérifiable dans l'onglet Réseau) ; sans jeton en mode réel → erreur claire
+  et statut `error`.
+- Hors ligne préservé : les nouveaux modules sont ajoutés au cache du service worker.
+- Aucun `TODO`, aucune fonction vide, zéro dépendance npm.
+
+## Interdits
+- Aucun appel réseau implicite : tout passe par `sendDraftBsff` avec `fetchImpl`.
+- Ne jamais écrire « Cerfa » dans un export sans la mention « document de travail ».
+- Ne pas casser les 6 tests existants, ni `design-ref/`, ni le mode hors ligne.
 
 exec
-/bin/bash -lc 'ls -la; cat SPEC2.md; cat package.json; cat tests/model.test.js; for f in /AGENTS.md /data/AGENTS.md /data/.hermes/AGENTS.md /data/.hermes/home/AGENTS.md /data/.hermes/home/frigo/AGENTS.md /data/.hermes/home/frigo/app/AGENTS.md; do if [ -f "$f" ]; then cat "$f"; fi; done' in /data/.hermes/home/frigo/app
+/bin/bash -lc 'ls -la; rg --files js tests; cat package.json; cat sw.js; cat tests/model.test.js' in /data/.hermes/home/frigo/app
  succeeded in 0ms:
 total 84
 drwxr-xr-x 6 root root 4096 Oct 23 11:40 .
@@ -98,8 +120,8 @@ drwxr-xr-x 8 root root 4096 Oct 23 11:40 .git
 -rw-r--r-- 1 root root   20 Oct 21 19:25 .gitignore
 -rw-r--r-- 1 root root 6497 Oct 21 19:24 README.md
 -rw-r--r-- 1 root root 5035 Oct 21 19:20 SPEC.md
--rw-r--r-- 1 root root 4795 Oct 23 11:40 SPEC2.md
--rw-r--r-- 1 root root 5354 Oct 23 11:40 codex2.log
+-rw-r--r-- 1 root root 5813 Oct 23 11:40 SPEC2.md
+-rw-r--r-- 1 root root 7181 Oct 23 11:40 codex2.log
 drwxr-xr-x 2 root root 4096 Oct 21 19:20 design-ref
 -rw-r--r-- 1 root root 5989 Oct 21 19:21 index.html
 drwxr-xr-x 2 root root 4096 Oct 21 19:25 js
@@ -108,81 +130,79 @@ drwxr-xr-x 2 root root 4096 Oct 21 19:25 js
 -rw-r--r-- 1 root root 4021 Oct 21 19:21 styles.css
 -rw-r--r-- 1 root root 1852 Oct 21 19:27 sw.js
 drwxr-xr-x 2 root root 4096 Oct 21 19:22 tests
-# SPEC v2 — Frigo : du formulaire au document et à l'envoi TrackDéchets
-
-Le socle existe (3 étapes, signature, file locale, hors ligne, 6 tests verts).
-Cette version ajoute ce qui transforme la démo en outil utilisable en production,
-**sans backend** et **sans nouvelle dépendance**.
-
-## 1. Document Cerfa 15497 (`js/cerfa.js`)
-- `buildCerfaHtml(intervention)` → chaîne HTML autonome, A4 portrait, styles inline,
-  reprenant la structure du Cerfa 15497*04 : cadre « Détenteur de l'équipement »,
-  « Opérateur », « Équipement » (marque, modèle, n° série, fluide, charge),
-  « Intervention » (type, date, poids avant/après, charge récupérée, longueur circuit),
-  bloc signature (image data URL + nom), mention en pied : **« Document de travail généré
-  par Frigo — ne remplace pas le Cerfa officiel signé. »**
-- `printToPdf()` côté UI : ouvre une fenêtre contenant le HTML et déclenche `print()`
-  (l'utilisateur choisit « Enregistrer en PDF »). Aucune bibliothèque PDF.
-- Contraintes d'impression : pas de bouton dans le document, marges 12 mm, texte ≥ 9 pt,
-  signature encadrée, tableau des mesures lisible en noir et blanc.
-
-## 2. Bilan F-Gas annuel (`js/bilan.js`)
-- `aggregateBilan(interventions, year)` → `{ year, count, byFluid: {R32: {n, kg}, R410A: {...}}, totalKg }`
-  en ne comptant que les interventions `status !== "draft"` de l'année demandée.
-- `buildBilanHtml(bilan, company)` → document imprimable listant les interventions
-  (date, client, fluide, charge récupérée) et les totaux par fluide.
-
-## 3. Envoi TrackDéchets (`js/trackdechets.js`)
-- `buildBsffPayload(intervention, company)` → objet JSON stable, sans `undefined` :
-  `{ type: "BSFF", emitter: {companySiret, name}, waste: {code: "14 06 01*", pop: true},
-     quantity: {value: chargeRecuperee, unit: "KG"}, takenOverAt: date, transporter: null,
-     destination: null, externalId: intervention.id }`.
-- `sendBsff(intervention, company, options)` avec `options = { token, endpoint, dryRun, fetchImpl }` :
-  - `dryRun` → ne fait aucun appel réseau, retourne `{ ok: true, dryRun: true, payload }` ;
-  - sans token → `{ ok: false, error: "token manquant" }` **sans** appel réseau ;
-  - en réel → `POST endpoint` avec `Authorization: Bearer <token>` et le payload ;
-    gère 200/201 (`ok: true`), 400/401/500 (`ok: false, error` avec le message serveur).
-- `fetchImpl` injectable : les tests ne font aucun réseau.
-
-## 4. Interface
-- Écran **Réglages** (nouvel onglet accessible depuis l'en-tête) : SIRET de l'entreprise,
-  nom, jeton TrackDéchets (champ mot de passe + case « afficher »), sélecteur
-  Environnement : Bac à sable | Production, case **Mode simulation (aucun envoi)** cochée par défaut.
-  Persistance dans `localStorage` clé `frigo.settings.v1`.
-- Sur l'écran de confirmation : boutons **« Exporter en PDF »**, **« Bilan F-Gas »**,
-  **« Envoyer à TrackDéchets »**. Chaque intervention porte désormais
-  `status: "pending" | "sent" | "error"` + `lastError` + `sentAt`, persistés.
-- Écran 1 : compteur « N interventions en attente · M envoyées ».
-
-## 5. Tests (s'ajoutent aux 6 existants, tous doivent passer)
-7. `buildCerfaHtml` contient marque, fluide, charge récupérée, nom du signataire et la mention obligatoire.
-8. `aggregateBilan` sur 3 interventions (2 en 2026, 1 en 2025) → compte 2, totaux par fluide corrects.
-9. `buildBsffPayload` : pas de `undefined`, `externalId` = id, quantité = charge récupérée.
-10. `sendBsff` en `dryRun` → `ok: true`, aucun appel au `fetchImpl` fourni.
-11. `sendBsff` sans token → `ok: false`, message explicite, aucun appel réseau.
-12. `sendBsff` avec `fetchImpl` renvoyant 201 → `ok: true` et payload transmis conforme.
-13. `sendBsff` avec `fetchImpl` renvoyant 400 → `ok: false`, message d'erreur remonté.
-14. Migration : une intervention de l'ancien format (sans `status`) est lue comme `status: "pending"`.
-
-## Definition of Done
-- `node --test` : **14 tests, 0 échec**.
-- Dans le navigateur : parcours complet d'une intervention, puis « Exporter en PDF » produit
-  un document imprimable contenant les données et la signature ; « Bilan F-Gas » liste
-  l'intervention ; « Envoyer à TrackDéchets » en mode simulation affiche `dry-run` sans réseau
-  (vérifiable onglet Réseau vide) ; en mode réel sans jeton → message d'erreur clair, statut `error`.
-- Hors ligne préservé (service worker, aucun appel réseau au chargement).
-- Aucun `TODO`, aucune fonction vide, pas de dépendance npm.
-
-## Interdits
-- Ne pas écrire le mot « Cerfa » sans la mention « document de travail » dans les exports.
-- Pas d'appel réseau implicite : tout envoi passe par `sendBsff` avec `fetchImpl`.
-- Ne pas casser les 6 tests existants ni `design-ref/`.
+tests/model.test.js
+js/model.js
+js/app.js
 {
   "name": "frigo",
   "private": true,
   "type": "module",
   "scripts": { "test": "node --test" }
 }
+// Service worker : app shell en cache, mise à jour propre.
+// Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
+const CACHE = 'frigo-shell-v2';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css',
+  './js/app.js',
+  './js/model.js',
+  './manifest.webmanifest',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ASSETS);
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  // Navigation : réseau d'abord, cache en secours (fonctionne hors ligne).
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request);
+        const cache = await caches.open(CACHE);
+        cache.put('./index.html', fresh.clone());
+        return fresh;
+      } catch {
+        const cache = await caches.open(CACHE);
+        return (await cache.match('./index.html')) || (await cache.match('./')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Ressources : cache d'abord, réseau ensuite.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const hit = await cache.match(request);
+    if (hit) return hit;
+    try {
+      const fresh = await fetch(request);
+      if (fresh && fresh.status === 200 && fresh.type === 'basic') {
+        cache.put(request, fresh.clone());
+      }
+      return fresh;
+    } catch {
+      return Response.error();
+    }
+  })());
+});
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateStep1, validateStep2, chargeRecuperee, loadQueue, toBsffPayload, toPrintableHtml, createIntervention, saveQueue, QUEUE_KEY } from '../js/model.js';
@@ -262,101 +282,63 @@ test('toPrintableHtml : contient le signataire, la signature et la mention oblig
   assert.ok(!escaped.includes('onerror='));
 });
 
-codex
-J’applique aussi les consignes du skill `cloud-environment-runtime` pour l’environnement d’exécution. Le travail restera local, sans appel réseau.
-
 exec
-/bin/bash -lc 'rg --files js tests; cat js/model.js; cat js/app.js; cat index.html; cat sw.js; cat styles.css; cat README.md; git status --short' in /data/.hermes/home/frigo/app
+/bin/bash -lc 'find .. -name AGENTS.md -print; cat index.html; cat js/*.js' in /data/.hermes/home/frigo/app
  succeeded in 0ms:
-tests/model.test.js
-js/app.js
-js/model.js
-export const QUEUE_KEY = 'frigo.interventions.v1';
-export const OPERATIONS = ['Mise en service', 'Maintenance', 'Démontage'];
-const present = value => typeof value === 'string' && value.trim().length > 0;
-const numeric = value => (typeof value === 'number' || present(value)) && Number.isFinite(Number(value));
-
-export function validateStep1(data) {
-  const errors = {};
-  if (!present(data.marque)) errors.marque = 'Indiquez la marque.';
-  if (!present(data.modele)) errors.modele = 'Indiquez le modèle.';
-  if (!['R32', 'R410A'].includes(data.fluide)) errors.fluide = 'Choisissez un fluide.';
-  if (!numeric(data.chargeTotale) || Number(data.chargeTotale) <= 0) errors.chargeTotale = 'La charge totale doit être supérieure à 0 kg.';
-  return errors;
-}
-
-export function validateStep2(data) {
-  const errors = {};
-  if (!OPERATIONS.includes(data.typeOperation)) errors.typeOperation = 'Choisissez une opération.';
-  if (!numeric(data.poidsAvant) || Number(data.poidsAvant) <= 0) errors.poidsAvant = 'Le poids avant doit être supérieur à 0 kg.';
-  if (!numeric(data.poidsApres) || Number(data.poidsApres) < 0) errors.poidsApres = 'Le poids après doit être positif ou nul.';
-  else if (numeric(data.poidsAvant) && Number(data.poidsApres) > Number(data.poidsAvant)) errors.poidsApres = 'Le poids après ne peut pas dépasser le poids avant.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date ?? '') || !Number.isFinite(Date.parse(data.date))) errors.date = 'Indiquez une date valide.';
-  if (data.longueurCircuit !== '' && data.longueurCircuit != null && (!numeric(data.longueurCircuit) || Number(data.longueurCircuit) < 0)) errors.longueurCircuit = 'La longueur doit être positive ou nulle.';
-  return errors;
-}
-
-export function chargeRecuperee(avant, apres) {
-  if (!numeric(avant) || !numeric(apres) || Number(avant) <= 0 || Number(apres) < 0 || Number(apres) > Number(avant)) throw new RangeError('Poids invalides.');
-  return Math.round((Number(avant) - Number(apres) + Number.EPSILON) * 100) / 100;
-}
-
-export function createIntervention(data, signatureDataUrl, { id = globalThis.crypto.randomUUID(), createdAt = new Date().toISOString() } = {}) {
-  const errors = { ...validateStep1(data), ...validateStep2(data) };
-  if (Object.keys(errors).length) throw new Error(Object.values(errors).join(' '));
-  if (!present(data.nomSignataire) || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureDataUrl)) throw new Error('Le nom et la signature sont obligatoires.');
-  return {
-    id, createdAt, marque: data.marque.trim(), modele: data.modele.trim(),
-    numeroSerie: String(data.numeroSerie ?? '').trim(), fluide: data.fluide,
-    chargeTotale: Number(data.chargeTotale), typeOperation: data.typeOperation, date: data.date,
-    poidsAvant: Number(data.poidsAvant), poidsApres: Number(data.poidsApres),
-    chargeRecuperee: chargeRecuperee(data.poidsAvant, data.poidsApres),
-    longueurCircuit: data.longueurCircuit === '' || data.longueurCircuit == null ? null : Number(data.longueurCircuit),
-    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending'
-  };
-}
-
-export function loadQueue(storage) {
-  try {
-    const queue = JSON.parse((storage ?? globalThis.localStorage).getItem(QUEUE_KEY) ?? '[]');
-    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending') : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveQueue(queue, storage = globalThis.localStorage) {
-  storage.setItem(QUEUE_KEY, JSON.stringify(queue));
-}
-
-// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l'intégration.
-export function toBsffPayload(intervention) {
-  const value = Number(intervention.chargeRecuperee ?? 0);
-  return {
-    type: 'COLLECTE_PETITES_QUANTITES',
-    waste: { description: String(intervention.fluide ?? '') },
-    weight: { value: Number.isFinite(value) ? Math.max(0, value) : 0, isEstimate: false }
-  };
-}
-
-export function summaryEntries(data) {
-  let recovered = '—';
-  try { recovered = `${chargeRecuperee(data.poidsAvant, data.poidsApres).toFixed(2)} kg`; } catch { /* Saisie encore incomplète. */ }
-  return [
-    ['Marque', data.marque], ['Modèle', data.modele], ['Numéro de série', data.numeroSerie || 'Non renseigné'],
-    ['Fluide', data.fluide], ['Charge totale', `${data.chargeTotale} kg`], ['Opération', data.typeOperation],
-    ['Date', data.date], ['Poids avant', `${data.poidsAvant} kg`], ['Poids après', `${data.poidsApres} kg`],
-    ['Charge récupérée', recovered], ['Longueur de circuit', data.longueurCircuit == null || data.longueurCircuit === '' ? 'Non renseignée' : `${data.longueurCircuit} m`],
-    ['Signataire', data.nomSignataire || 'À renseigner']
-  ];
-}
-
-const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-
-export function toPrintableHtml(intervention) {
-  const signature = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(intervention.signatureDataUrl ?? '') ? intervention.signatureDataUrl : '';
-  return `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Frigo — Document de travail</title><body style="font:18px/1.5 system-ui,sans-serif;color:#0b1c30;background:white;max-width:800px;margin:32px auto;padding:16px"><h1>Fiche d’intervention — fluides frigorigènes</h1><p>Document de travail — ne remplace pas le Cerfa officiel signé</p><p>Référence : ${escapeHtml(intervention.id)}<br>Enregistrée : ${escapeHtml(intervention.createdAt)}</p><dl>${summaryEntries(intervention).map(([key, value]) => `<dt style="font-weight:700">${escapeHtml(key)}</dt><dd style="margin:0 0 12px">${escapeHtml(value)}</dd>`).join('')}</dl><h2>Signature</h2><img style="width:100%;max-width:500px;border:1px solid #707881" alt="Signature de ${escapeHtml(intervention.nomSignataire)}" src="${signature}"></body></html>`;
-}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f6b47">
+  <title>Frigo · Fiche d’intervention</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f6b47'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='44' fill='white'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="eyebrow"><strong>FRIGO</strong><span>Assistant Cerfa 15497</span></div>
+    <p id="offline" class="notice" role="status" hidden>Hors connexion</p>
+    <div class="heading"><h1 id="title" tabindex="-1">1. Équipement</h1><span id="step-label">Étape 1 sur 3</span></div>
+    <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
+    <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
+  </header>
+  <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
+  <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
+  <form id="intervention-form" novalidate>
+    <section data-step="1" aria-labelledby="title">
+      <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
+      <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
+      <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
+      <fieldset><legend>4. Fluide frigorigène</legend><div class="choices"><label><input type="radio" name="fluide" value="R32" required><span>R32</span></label><label><input type="radio" name="fluide" value="R410A"><span>R410A</span></label></div></fieldset>
+      <div class="field"><label for="chargeTotale">5. Charge totale (kg)</label><div class="stepper"><button type="button" id="minus" aria-label="Diminuer la charge de 0,1 kg">−</button><input id="chargeTotale" name="chargeTotale" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="0,0" required><button type="button" id="plus" aria-label="Augmenter la charge de 0,1 kg">+</button></div></div>
+      <div class="actions"><button class="primary" type="submit">Suivant <span aria-hidden="true">→</span></button></div>
+    </section>
+    <section data-step="2" aria-labelledby="title" hidden>
+      <fieldset><legend>Type d’opération</legend><div class="choices vertical"><label><input type="radio" name="typeOperation" value="Mise en service" required><span>Mise en service</span></label><label><input type="radio" name="typeOperation" value="Maintenance"><span>Maintenance</span></label><label><input type="radio" name="typeOperation" value="Démontage"><span>Démontage</span></label></div></fieldset>
+      <div class="field"><label for="date">Date</label><input id="date" name="date" type="date" required></div>
+      <div class="field"><label for="poidsAvant">Poids bouteille avant (kg)</label><input id="poidsAvant" name="poidsAvant" type="number" inputmode="decimal" min="0.01" step="0.01" required></div>
+      <div class="field"><label for="poidsApres">Poids bouteille après (kg)</label><input id="poidsApres" name="poidsApres" type="number" inputmode="decimal" min="0" step="0.01" required></div>
+      <div class="field"><label for="chargeRecuperee">Charge récupérée (kg)</label><input id="chargeRecuperee" readonly value="—" aria-live="polite"><small>Poids avant − poids après</small></div>
+      <div class="field"><label for="longueurCircuit">Longueur de circuit (m, optionnel)</label><input id="longueurCircuit" name="longueurCircuit" type="number" inputmode="decimal" min="0" step="0.1"></div>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Suivant →</button></div>
+    </section>
+    <section data-step="3" aria-labelledby="title" hidden>
+      <div class="field"><label for="nomSignataire">Nom du signataire</label><input id="nomSignataire" name="nomSignataire" autocomplete="name" required></div>
+      <div class="field"><label id="signature-label" for="signature">Signature au doigt ou à la souris</label><canvas id="signature" width="700" height="360" tabindex="0" aria-labelledby="signature-label" aria-describedby="signature-help">La signature nécessite un navigateur compatible canvas.</canvas><small id="signature-help">Tracez votre signature dans le cadre.</small><button id="clear-signature" type="button">Effacer</button></div>
+      <h2>Récapitulatif</h2><dl id="summary"></dl>
+      <p class="hint">Document de travail — ne remplace pas le Cerfa officiel signé</p>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
+    </section>
+  </form>
+  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
+  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
+</div>
+</body>
+</html>
 import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries, toBsffPayload, toPrintableHtml } from './model.js';
 
 const $ = selector => document.querySelector(selector);
@@ -578,124 +560,97 @@ if ('serviceWorker' in navigator) {
 } else {
   $('#cache-status').textContent = 'Ce navigateur ne permet pas le mode hors ligne.';
 }
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f6b47">
-  <title>Frigo · Fiche d’intervention</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f6b47'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='44' fill='white'%3EF%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css">
-  <script type="module" src="js/app.js"></script>
-</head>
-<body>
-<div class="shell">
-  <header>
-    <div class="eyebrow"><strong>FRIGO</strong><span>Assistant Cerfa 15497</span></div>
-    <p id="offline" class="notice" role="status" hidden>Hors connexion</p>
-    <div class="heading"><h1 id="title" tabindex="-1">1. Équipement</h1><span id="step-label">Étape 1 sur 3</span></div>
-    <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
-    <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
-  </header>
-  <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
-  <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
-  <form id="intervention-form" novalidate>
-    <section data-step="1" aria-labelledby="title">
-      <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
-      <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
-      <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
-      <fieldset><legend>4. Fluide frigorigène</legend><div class="choices"><label><input type="radio" name="fluide" value="R32" required><span>R32</span></label><label><input type="radio" name="fluide" value="R410A"><span>R410A</span></label></div></fieldset>
-      <div class="field"><label for="chargeTotale">5. Charge totale (kg)</label><div class="stepper"><button type="button" id="minus" aria-label="Diminuer la charge de 0,1 kg">−</button><input id="chargeTotale" name="chargeTotale" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="0,0" required><button type="button" id="plus" aria-label="Augmenter la charge de 0,1 kg">+</button></div></div>
-      <div class="actions"><button class="primary" type="submit">Suivant <span aria-hidden="true">→</span></button></div>
-    </section>
-    <section data-step="2" aria-labelledby="title" hidden>
-      <fieldset><legend>Type d’opération</legend><div class="choices vertical"><label><input type="radio" name="typeOperation" value="Mise en service" required><span>Mise en service</span></label><label><input type="radio" name="typeOperation" value="Maintenance"><span>Maintenance</span></label><label><input type="radio" name="typeOperation" value="Démontage"><span>Démontage</span></label></div></fieldset>
-      <div class="field"><label for="date">Date</label><input id="date" name="date" type="date" required></div>
-      <div class="field"><label for="poidsAvant">Poids bouteille avant (kg)</label><input id="poidsAvant" name="poidsAvant" type="number" inputmode="decimal" min="0.01" step="0.01" required></div>
-      <div class="field"><label for="poidsApres">Poids bouteille après (kg)</label><input id="poidsApres" name="poidsApres" type="number" inputmode="decimal" min="0" step="0.01" required></div>
-      <div class="field"><label for="chargeRecuperee">Charge récupérée (kg)</label><input id="chargeRecuperee" readonly value="—" aria-live="polite"><small>Poids avant − poids après</small></div>
-      <div class="field"><label for="longueurCircuit">Longueur de circuit (m, optionnel)</label><input id="longueurCircuit" name="longueurCircuit" type="number" inputmode="decimal" min="0" step="0.1"></div>
-      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Suivant →</button></div>
-    </section>
-    <section data-step="3" aria-labelledby="title" hidden>
-      <div class="field"><label for="nomSignataire">Nom du signataire</label><input id="nomSignataire" name="nomSignataire" autocomplete="name" required></div>
-      <div class="field"><label id="signature-label" for="signature">Signature au doigt ou à la souris</label><canvas id="signature" width="700" height="360" tabindex="0" aria-labelledby="signature-label" aria-describedby="signature-help">La signature nécessite un navigateur compatible canvas.</canvas><small id="signature-help">Tracez votre signature dans le cadre.</small><button id="clear-signature" type="button">Effacer</button></div>
-      <h2>Récapitulatif</h2><dl id="summary"></dl>
-      <p class="hint">Document de travail — ne remplace pas le Cerfa officiel signé</p>
-      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
-    </section>
-  </form>
-  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
-  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
-</div>
-</body>
-</html>
-// Service worker : app shell en cache, mise à jour propre.
-// Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
-const CACHE = 'frigo-shell-v2';
-const ASSETS = [
-  './',
-  './index.html',
-  './styles.css',
-  './js/app.js',
-  './js/model.js',
-  './manifest.webmanifest',
-];
+export const QUEUE_KEY = 'frigo.interventions.v1';
+export const OPERATIONS = ['Mise en service', 'Maintenance', 'Démontage'];
+const present = value => typeof value === 'string' && value.trim().length > 0;
+const numeric = value => (typeof value === 'number' || present(value)) && Number.isFinite(Number(value));
 
-self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
-    await self.skipWaiting();
-  })());
-});
+export function validateStep1(data) {
+  const errors = {};
+  if (!present(data.marque)) errors.marque = 'Indiquez la marque.';
+  if (!present(data.modele)) errors.modele = 'Indiquez le modèle.';
+  if (!['R32', 'R410A'].includes(data.fluide)) errors.fluide = 'Choisissez un fluide.';
+  if (!numeric(data.chargeTotale) || Number(data.chargeTotale) <= 0) errors.chargeTotale = 'La charge totale doit être supérieure à 0 kg.';
+  return errors;
+}
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
-    await self.clients.claim();
-  })());
-});
+export function validateStep2(data) {
+  const errors = {};
+  if (!OPERATIONS.includes(data.typeOperation)) errors.typeOperation = 'Choisissez une opération.';
+  if (!numeric(data.poidsAvant) || Number(data.poidsAvant) <= 0) errors.poidsAvant = 'Le poids avant doit être supérieur à 0 kg.';
+  if (!numeric(data.poidsApres) || Number(data.poidsApres) < 0) errors.poidsApres = 'Le poids après doit être positif ou nul.';
+  else if (numeric(data.poidsAvant) && Number(data.poidsApres) > Number(data.poidsAvant)) errors.poidsApres = 'Le poids après ne peut pas dépasser le poids avant.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date ?? '') || !Number.isFinite(Date.parse(data.date))) errors.date = 'Indiquez une date valide.';
+  if (data.longueurCircuit !== '' && data.longueurCircuit != null && (!numeric(data.longueurCircuit) || Number(data.longueurCircuit) < 0)) errors.longueurCircuit = 'La longueur doit être positive ou nulle.';
+  return errors;
+}
 
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  if (request.method !== 'GET') return;
+export function chargeRecuperee(avant, apres) {
+  if (!numeric(avant) || !numeric(apres) || Number(avant) <= 0 || Number(apres) < 0 || Number(apres) > Number(avant)) throw new RangeError('Poids invalides.');
+  return Math.round((Number(avant) - Number(apres) + Number.EPSILON) * 100) / 100;
+}
 
-  // Navigation : réseau d'abord, cache en secours (fonctionne hors ligne).
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const fresh = await fetch(request);
-        const cache = await caches.open(CACHE);
-        cache.put('./index.html', fresh.clone());
-        return fresh;
-      } catch {
-        const cache = await caches.open(CACHE);
-        return (await cache.match('./index.html')) || (await cache.match('./')) || Response.error();
-      }
-    })());
-    return;
+export function createIntervention(data, signatureDataUrl, { id = globalThis.crypto.randomUUID(), createdAt = new Date().toISOString() } = {}) {
+  const errors = { ...validateStep1(data), ...validateStep2(data) };
+  if (Object.keys(errors).length) throw new Error(Object.values(errors).join(' '));
+  if (!present(data.nomSignataire) || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureDataUrl)) throw new Error('Le nom et la signature sont obligatoires.');
+  return {
+    id, createdAt, marque: data.marque.trim(), modele: data.modele.trim(),
+    numeroSerie: String(data.numeroSerie ?? '').trim(), fluide: data.fluide,
+    chargeTotale: Number(data.chargeTotale), typeOperation: data.typeOperation, date: data.date,
+    poidsAvant: Number(data.poidsAvant), poidsApres: Number(data.poidsApres),
+    chargeRecuperee: chargeRecuperee(data.poidsAvant, data.poidsApres),
+    longueurCircuit: data.longueurCircuit === '' || data.longueurCircuit == null ? null : Number(data.longueurCircuit),
+    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending'
+  };
+}
+
+export function loadQueue(storage) {
+  try {
+    const queue = JSON.parse((storage ?? globalThis.localStorage).getItem(QUEUE_KEY) ?? '[]');
+    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending') : [];
+  } catch {
+    return [];
   }
+}
 
-  // Ressources : cache d'abord, réseau ensuite.
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const hit = await cache.match(request);
-    if (hit) return hit;
-    try {
-      const fresh = await fetch(request);
-      if (fresh && fresh.status === 200 && fresh.type === 'basic') {
-        cache.put(request, fresh.clone());
-      }
-      return fresh;
-    } catch {
-      return Response.error();
-    }
-  })());
-});
+export function saveQueue(queue, storage = globalThis.localStorage) {
+  storage.setItem(QUEUE_KEY, JSON.stringify(queue));
+}
+
+// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l'intégration.
+export function toBsffPayload(intervention) {
+  const value = Number(intervention.chargeRecuperee ?? 0);
+  return {
+    type: 'COLLECTE_PETITES_QUANTITES',
+    waste: { description: String(intervention.fluide ?? '') },
+    weight: { value: Number.isFinite(value) ? Math.max(0, value) : 0, isEstimate: false }
+  };
+}
+
+export function summaryEntries(data) {
+  let recovered = '—';
+  try { recovered = `${chargeRecuperee(data.poidsAvant, data.poidsApres).toFixed(2)} kg`; } catch { /* Saisie encore incomplète. */ }
+  return [
+    ['Marque', data.marque], ['Modèle', data.modele], ['Numéro de série', data.numeroSerie || 'Non renseigné'],
+    ['Fluide', data.fluide], ['Charge totale', `${data.chargeTotale} kg`], ['Opération', data.typeOperation],
+    ['Date', data.date], ['Poids avant', `${data.poidsAvant} kg`], ['Poids après', `${data.poidsApres} kg`],
+    ['Charge récupérée', recovered], ['Longueur de circuit', data.longueurCircuit == null || data.longueurCircuit === '' ? 'Non renseignée' : `${data.longueurCircuit} m`],
+    ['Signataire', data.nomSignataire || 'À renseigner']
+  ];
+}
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+export function toPrintableHtml(intervention) {
+  const signature = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(intervention.signatureDataUrl ?? '') ? intervention.signatureDataUrl : '';
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Frigo — Document de travail</title><body style="font:18px/1.5 system-ui,sans-serif;color:#0b1c30;background:white;max-width:800px;margin:32px auto;padding:16px"><h1>Fiche d’intervention — fluides frigorigènes</h1><p>Document de travail — ne remplace pas le Cerfa officiel signé</p><p>Référence : ${escapeHtml(intervention.id)}<br>Enregistrée : ${escapeHtml(intervention.createdAt)}</p><dl>${summaryEntries(intervention).map(([key, value]) => `<dt style="font-weight:700">${escapeHtml(key)}</dt><dd style="margin:0 0 12px">${escapeHtml(value)}</dd>`).join('')}</dl><h2>Signature</h2><img style="width:100%;max-width:500px;border:1px solid #707881" alt="Signature de ${escapeHtml(intervention.nomSignataire)}" src="${signature}"></body></html>`;
+}
+
+exec
+/bin/bash -lc 'git status --short; cat styles.css; ls /data/.hermes/home; command -v chromium || command -v google-chrome || true' in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+ M codex2.log
 :root { font-family: system-ui, sans-serif; color: #0b1c30; background: #f8f9ff; font-size: 18px; line-height: 1.4; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -756,6 +711,587 @@ dd:last-child { margin-bottom: 0; }
 .success-mark { color: #0f6b47; font-size: 48px; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background-color .12s; } }
 @media print { .actions, #queue, header { display: none; } }
+10-idees-services-ia.md
+IDEES.md
+PROJETS.md
+common
+fastapi-service
+frigo
+ideas
+intl
+pricewatch
+prospects_bijoux_horlogerie_lunettes.json
+prospects_emails.json
+/usr/bin/chromium
+
+codex
+Le socle conserve uniquement les interventions `pending` à la relecture : je vais corriger cela pour préserver les statuts d’envoi et migrer les anciennes fiches. Les exports actuels ne contiennent pas le détenteur ni les coordonnées de l’entreprise ; j’ajoute ces données et réserve l’envoi au client GraphQL explicite, avec simulation par défaut.
+exec
+/bin/bash -lc "cat > js/cerfa.js <<'EOF'
+export const escapeHtml = value => String(value ?? '').replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[char]);
+
+export function documentHtml(title, content) {
+  return "'`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
+@page { size: A4 portrait; margin: 12mm; }
+* { box-sizing: border-box; } body { margin: 0; font: 11pt/1.4 sans-serif; color: #000; background: #fff; overflow-wrap: anywhere; }
+h1 { font-size: 18pt; } h2 { font-size: 13pt; margin: 5mm 0 2mm; } p { margin: 2mm 0; }
+table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #000; padding: 2mm; text-align: left; } thead { display: table-header-group; } tr { break-inside: avoid; }
+.signature { max-width: 75mm; max-height: 35mm; object-fit: contain; } footer { margin-top: 6mm; font-size: 9pt; } @media print { button { display: none; } }
+</style></head><body>${content}<footer>Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé.</footer></body></html>`;
+}
+
+export function buildCerfaHtml(intervention, company = {}) {
+  const i = intervention;
+  const signature = /''^data:image'"\\/png;base64,[A-Za-z0-9+/=]+"'$/.test(i.signatureDataUrl ?? '"'') ? i.signatureDataUrl : '';
+  const rows = [
+    ['Marque', i.marque], ['Modèle', i.modele], ['Numéro de série', i.numeroSerie],
+    ['Fluide', i.fluide], ['Charge totale (kg)', i.chargeTotale],
+    ['Type d’intervention', i.typeOperation], ['Date', i.date], ['Poids avant (kg)', i.poidsAvant],
+    ['Poids après (kg)', i.poidsApres], ['Charge récupérée (kg)', i.chargeRecuperee],
+    ['Longueur circuit (m)', i.longueurCircuit]
+  ];
+  return documentHtml('Frigo — Document de travail', "'`<h1>Fiche d’intervention — fluides frigorigènes</h1>
+<p>Référence : ${escapeHtml(i.id)}</p><h2>Détenteur de l’équipement</h2>
+<p>${escapeHtml(i.client || '"'Non renseigné')}<br>"'${escapeHtml(i.clientAdresse)}</p>
+<h2>Opérateur</h2><p>${escapeHtml(company.name)} — SIRET : ${escapeHtml(company.siret)}<br>${escapeHtml(company.address)}</p>
+<p>Contact : ${escapeHtml(company.contact)} · ${escapeHtml(company.phone)} · ${escapeHtml(company.mail)}</p>
+<h2>Équipement et intervention</h2><table><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value ?? '"'Non renseigné')}</td></tr>"'`).join('"'')}</tbody></table>
+<h2>Signature</h2><p>"'${escapeHtml(i.nomSignataire)}</p>${signature ? `<img class="signature" alt="Signature de ${escapeHtml(i.nomSignataire)}" src="${signature}">` : '"'<p>Signature non renseignée</p>'}"'`);
+}
+
+export function printDoc(html) {
+  const popup = window.open('"'', '_blank');
+  if ("'!popup) throw new Error('"'Autorisez les fenêtres contextuelles pour imprimer le document.');
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+  // Attend aussi le décodage de la signature avant d’ouvrir l’impression.
+  const ready = () => Promise.all([...popup.document.images].map(img => img.decode().catch(() => {})))
+    .then(() => { popup.focus(); popup.print(); });
+  if (popup.document.readyState === 'complete') return ready();
+  return new Promise(resolve => popup.addEventListener('load', resolve, { once: true })).then(ready);
+}
+EOF
+cat > js/bilan.js <<'EOF'
+import { documentHtml, escapeHtml } from './cerfa.js';
+
+export function aggregateBilan(interventions, year) {
+  year = Number(year);
+  const rows = interventions.filter(i => i && i.status "'!== '"'draft' &&
+    String(i.date ?? '').startsWith("'`${year}-`) && ['"'R32', 'R410A'].includes(i.fluide));
+  const byFluid = { R32: { n: 0, kg: 0 }, R410A: { n: 0, kg: 0 } };
+  const entries = rows.map(i => {
+    const kg = Number(i.chargeRecuperee);
+    return { date: i.date, client: i.client ?? '', fluide: i.fluide, kg: Number.isFinite(kg) ? Math.max(0, kg) : 0 };
+  });
+  for (const row of entries) {
+    byFluid[row.fluide].n++;
+    byFluid[row.fluide].kg += Math.round(row.kg * 100);
+  }
+  for (const total of Object.values(byFluid)) total.kg /= 100;
+  return { year, count: entries.length, byFluid, totalKg: Math.round(Object.values(byFluid).reduce((sum, v) => sum + v.kg, 0) * 100) / 100, entries };
+}
+
+export function buildBilanHtml(bilan, company = {}) {
+  return documentHtml("'`Frigo — Bilan F-Gas ${bilan.year}`, `<h1>Bilan F-Gas ${escapeHtml(bilan.year)}</h1>
+<p>${escapeHtml(company.name)} — SIRET : ${escapeHtml(company.siret)}<br>${escapeHtml(company.address)}</p>
+<table><thead><tr><th>Date</th><th>Client</th><th>Fluide</th><th>kg récupérés</th></tr></thead><tbody>${(bilan.entries ?? []).map(row => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.client)}</td><td>${escapeHtml(row.fluide)}</td><td>${escapeHtml(row.kg.toFixed(2))}</td></tr>`).join('"'')}</tbody></table>
+<h2>Totaux</h2><p>"'${escapeHtml(bilan.count)} intervention(s)</p><table><thead><tr><th>Fluide</th><th>Interventions</th><th>kg récupérés</th></tr></thead><tbody>${Object.entries(bilan.byFluid).map(([fluid, total]) => `<tr><th scope="row">${escapeHtml(fluid)}</th><td>${escapeHtml(total.n)}</td><td>${escapeHtml(total.kg.toFixed(2))}</td></tr>`).join('"'')}</tbody><tfoot><tr><th colspan=\"2\">Total (kg)</th><td>"'${escapeHtml(bilan.totalKg.toFixed(2))}</td></tr></tfoot></table>`);
+}
+EOF
+cat > js/trackdechets.js <<'"'EOF'
+export const ENDPOINTS = Object.freeze({
+  sandbox: 'https://api.sandbox.trackdechets.beta.gouv.fr',
+  production: 'https://api.trackdechets.beta.gouv.fr'
+});
+
+export const GRAPHQL_CREATE_DRAFT_BSFF = "'`mutation CreateDraftBsff($input: BsffInput!) {
+  createDraftBsff(input: $input) { id }
+}`;
+
+export function buildDraftBsffVariables(intervention, company = {}) {
+  const fields = ['"'siret', 'name', 'contact', 'phone', 'mail', 'address'];
+  const known = Object.fromEntries(fields.filter(key => typeof company[key] === 'string' && company[key].trim())
+    .map(key => [key, company[key].trim()]));
+  return { input: { type: 'BSFF', emitter: { company: known } } };
+}
+
+export async function sendDraftBsff(intervention, company, { token, endpoint = ENDPOINTS.sandbox, dryRun = true, fetchImpl } = {}) {
+  const body = { query: GRAPHQL_CREATE_DRAFT_BSFF, variables: buildDraftBsffVariables(intervention, company) };
+  if (dryRun) return { ok: true, dryRun: true, body };
+  if ("'!token?.trim()) return { ok: false, error: '"'jeton TrackDéchets manquant' };
+  if (typeof fetchImpl "'!== '"'function') return { ok: false, error: 'Transport réseau TrackDéchets manquant' };
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: 'POST', headers: { Authorization: "'`Bearer ${token.trim()}`, '"'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const raw = await response.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { data = {}; }
+    const message = data.errors?.map(error => error.message).filter(Boolean).join(' · ') || data.message || data.error;
+    if ("'!response.ok || data.errors?.length) return { ok: false, error: String(message || raw || `Erreur HTTP ${response.status}`) };
+    const id = data.data?.createDraftBsff?.id;
+    if (!id) return { ok: false, error: '"'Réponse TrackDéchets sans identifiant de brouillon' };
+    return { ok: true, id };
+  } catch (error) {
+    return { ok: false, error: error.message || 'Connexion TrackDéchets impossible' };
+  }
+}
+EOF
+cat > js/settings.js <<'EOF'
+import { ENDPOINTS } from './trackdechets.js';
+export const SETTINGS_KEY = 'frigo.settings.v1';
+const defaults = { siret: '', name: '', contact: '', phone: '', mail: '', address: '', token: '', environment: 'sandbox', dryRun: true };
+export function loadSettings(storage = globalThis.localStorage) {
+  try {
+    const saved = JSON.parse(storage.getItem(SETTINGS_KEY) ?? '{}');
+    const settings = { ...defaults };
+    for (const key of Object.keys(defaults)) if (typeof saved?.[key] === typeof defaults[key]) settings[key] = saved[key];
+    if ("'!Object.hasOwn(ENDPOINTS, settings.environment)) settings.environment = '"'sandbox';
+    return settings;
+  } catch { return { ...defaults }; }
+}
+export function saveSettings(settings, storage = globalThis.localStorage) {
+  storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+EOF
+python3 - <<'PY'
+p='js/model.js'
+s=open(p).read().replace(\"id, createdAt, marque:\", \"id, createdAt, client: String(data.client ?? '').trim(), clientAdresse: String(data.clientAdresse ?? '').trim(), marque:\")
+s=s.replace(\"signatureDataUrl, status: 'pending'\", \"signatureDataUrl, status: 'pending', lastError: null, sentAt: null, trackdechetsId: null\")
+s=s.replace(\"queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending')\", \"queue.filter(item => item && typeof item.id === 'string' && [undefined, 'pending', 'draft-created', 'error', 'draft'].includes(item.status)).map(item => ({ ...item, status: item.status ?? 'pending' }))\")
+s=s.replace('// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l’intégration.', '// Export historique conservé pour compatibilité ; aucun envoi réseau ne l’utilise.')
+s=s.replace(\"return [\\n    ['Marque'\", \"return [\\n    ['Détenteur', data.client || 'Non renseigné'], ['Adresse du détenteur', data.clientAdresse || 'Non renseignée'],\\n    ['Marque'\")
+open(p,'w').write(s)
+p='sw.js';s=open(p).read().replace('frigo-shell-v2','frigo-shell-v3').replace(\"  './js/model.js',\", \"  './js/model.js',\\n  './js/cerfa.js',\\n  './js/bilan.js',\\n  './js/trackdechets.js',\\n  './js/settings.js',\")
+open(p,'w').write(s)
+PY" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='index.html';s=open(p).read();s=s.replace('  <noscript>', '''  <nav class=\"export-actions\" aria-label=\"Navigation\"><button id=\"tab-intervention\" type=\"button\" aria-pressed=\"true\">Intervention</button><button id=\"tab-settings\" type=\"button\" aria-pressed=\"false\">Réglages</button></nav>
+  <section id=\"settings-panel\" hidden aria-labelledby=\"settings-title\">
+    <h2 id=\"settings-title\">Réglages</h2>
+    <form id=\"settings-form\">
+      <div class=\"field\"><label for=\"company-siret\">SIRET</label><input id=\"company-siret\" name=\"siret\" inputmode=\"numeric\" pattern=\"[0-9]{14}\" maxlength=\"14\"></div>
+      <div class=\"field\"><label for=\"company-name\">Nom de l’entreprise</label><input id=\"company-name\" name=\"name\"></div>
+      <div class=\"field\"><label for=\"company-contact\">Contact</label><input id=\"company-contact\" name=\"contact\"></div>
+      <div class=\"field\"><label for=\"company-phone\">Téléphone</label><input id=\"company-phone\" name=\"phone\" type=\"tel\"></div>
+      <div class=\"field\"><label for=\"company-mail\">Email</label><input id=\"company-mail\" name=\"mail\" type=\"email\"></div>
+      <div class=\"field\"><label for=\"company-address\">Adresse</label><input id=\"company-address\" name=\"address\"></div>
+      <div class=\"field\"><label for=\"td-token\">Jeton TrackDéchets</label><input id=\"td-token\" name=\"token\" type=\"password\" autocomplete=\"off\"><label class=\"check\"><input id=\"show-token\" type=\"checkbox\"> Afficher le jeton</label></div>
+      <div class=\"field\"><label for=\"td-environment\">Environnement</label><select id=\"td-environment\" name=\"environment\"><option value=\"sandbox\">Bac à sable</option><option value=\"production\">Production</option></select></div>
+      <label class=\"check\"><input name=\"dryRun\" type=\"checkbox\" checked> Mode simulation</label>
+      <button type=\"submit\" class=\"primary\">Enregistrer les réglages</button>
+      <p id=\"settings-status\" role=\"status\"></p>
+    </form>
+  </section>
+  <div id=\"intervention-panel\">
+  <noscript>''');s=s.replace('    <section data-step=\"1\" aria-labelledby=\"title\">','''    <section data-step=\"1\" aria-labelledby=\"title\">
+      <div class=\"field\"><label for=\"client\">Détenteur de l’équipement (client)</label><input id=\"client\" name=\"client\" autocomplete=\"organization\"></div>
+      <div class=\"field\"><label for=\"clientAdresse\">Adresse du détenteur</label><input id=\"clientAdresse\" name=\"clientAdresse\" autocomplete=\"street-address\"></div>''')
+s=s.replace('<p>Aucun envoi à TrackDéchets n’a été effectué.</p>', '''<div class=\"export-actions\"><button id=\"export-pdf\" type=\"button\">Exporter en PDF</button><button id=\"export-bilan\" type=\"button\">Bilan F-Gas</button><button id=\"create-draft\" type=\"button\">Créer le brouillon TrackDéchets</button></div><p id=\"send-status\" role=\"status\">Aucun envoi à TrackDéchets n’a été effectué.</p>''')
+s=s.replace('Stockage sur cet appareil · Envoi TrackDéchets non connecté', 'Stockage sur cet appareil · Envoi manuel depuis cette liste')
+s=s.replace('</aside>','</aside>\\n  </div>')
+open(p,'w').write(s)
+p='js/app.js';s=open(p).read().replace(', toBsffPayload, toPrintableHtml', '')
+s=s.replace(\"const "'$ =", """import { buildCerfaHtml, printDoc } from '"'./cerfa.js';
+import { aggregateBilan, buildBilanHtml } from './bilan.js';
+import { sendDraftBsff, ENDPOINTS } from './trackdechets.js';
+import { loadSettings, saveSettings } from './settings.js';
+
+let settings = loadSettings();
+let currentId = null;
+const sending = new Set();
+const "'$ =""")
+a=s.index('"'function renderQueue()');b=s.index('\\nfunction updateRecovered()',a)
+s=s[:a]+'''function printSafely(html) {
+  try { Promise.resolve(printDoc(html)).catch(error => showError(error.message)); }
+  catch (error) { showError(error.message); }
+}
+
+function printBilan(item) {
+  printSafely(buildBilanHtml(aggregateBilan(queue, Number(item.date.slice(0, 4))), settings));
+}
+
+async function createDraft(item) {
+  if (sending.has(item.id) || item.trackdechetsId) return;
+  sending.add(item.id);
+  renderQueue();
+  "'$('"'#create-draft').disabled = sending.has(currentId);
+  "'$('"'#send-status').textContent = 'Traitement en cours…';
+  const result = await sendDraftBsff(item, settings, {
+    token: [REDACTED_SECRET] endpoint: ENDPOINTS[settings.environment], dryRun: settings.dryRun,
+    fetchImpl: (...args) => window.fetch(...args)
+  });
+  let message;
+  if (result.dryRun) {
+    message = 'dry-run : simulation réussie, aucun envoi réseau. Statut en attente conservé.';
+  } else {
+    const updated = { ...item, status: result.ok ? 'draft-created' : 'error',
+      lastError: result.ok ? null : result.error, sentAt: result.ok ? new Date().toISOString() : item.sentAt ?? null,
+      trackdechetsId: result.ok ? result.id : item.trackdechetsId ?? null };
+    const next = queue.map(entry => entry.id === item.id ? updated : entry);
+    try { saveQueue(next); queue = next; }
+    catch (error) {
+      // Conserve aussi l’identifiant en mémoire pour éviter un second envoi.
+      queue = next;
+      showError("'`Résultat TrackDéchets reçu mais stockage impossible : ${error.message}`);
+    }
+    message = result.ok ? `Brouillon créé : ${result.id}` : result.error;
+  }
+  $('"'#send-status').textContent = message;
+  sending.delete(item.id);
+  renderQueue();
+  "'$('"'#create-draft').disabled = Boolean(queue.find(entry => entry.id === currentId)?.trackdechetsId) || sending.has(currentId);
+}
+
+function renderQueue() {
+  const count = status => queue.filter(item => item.status === status).length;
+  "'$('"'#queue-title').textContent = "'`${count('"'pending')} en attente · "'${count('"'draft-created')} brouillons créés · "'${count('"'error')} erreurs"'`;
+  $('"'#queue-list').replaceChildren();
+  for (const item of queue) {
+    const article = document.createElement('article');
+    const title = document.createElement('p');
+    title.textContent = "'`${item.marque} ${item.modele} · ${item.date} · ${item.status}${item.lastError ? ` · ${item.lastError}` : '"''}"'${item.trackdechetsId ? ` · ${item.trackdechetsId}` : '"''}"'`;
+    const actions = document.createElement('"'div');
+    actions.className = 'export-actions';
+    for (const [label, action] of [
+      ['Exporter en PDF', () => printSafely(buildCerfaHtml(item, settings))],
+      ['Bilan F-Gas', () => printBilan(item)],
+      ['Créer le brouillon TrackDéchets', () => createDraft(item)],
+      ['Sauvegarder la fiche', () => download(JSON.stringify(item, null, 2), "'`frigo-${item.id}.json`, '"'application/json')]
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.disabled = label === 'Créer le brouillon TrackDéchets' && (sending.has(item.id) || Boolean(item.trackdechetsId));
+      button.setAttribute('aria-label', "'`${label} : ${item.marque} ${item.modele}, ${item.date}`);
+      button.addEventListener('"'click', action);
+      actions.append(button);
+    }
+    article.append(title, actions);
+    "'$('"'#queue-list').append(article);
+  }
+}
+''' +s[b:]
+s=s.replace('    queue = nextQueue;', '''    queue = nextQueue;
+    currentId = intervention.id;
+    "'$('"'#send-status').textContent = 'Aucun envoi à TrackDéchets n’a été effectué.';
+    "'$('"'#create-draft').disabled = false;''')
+s=s.replace(\"window.addEventListener('storage', () => { queue = loadQueue(); renderQueue(); });\", \"window.addEventListener('storage', () => { queue = loadQueue(); settings = loadSettings(); fillSettings(); renderQueue(); });\")
+s += '''
+function fillSettings() {
+  const fields = "'$('"'#settings-form').elements;
+  for (const [key, value] of Object.entries(settings)) {
+    if (key === 'dryRun') fields.namedItem(key).checked = value;
+    else fields.namedItem(key).value = value;
+  }
+}
+function showSettings(visible) {
+  "'$('"'#settings-panel').hidden = "'!visible;
+  $('"'#intervention-panel').hidden = visible;
+  "'$('"'#tab-settings').setAttribute('aria-pressed', String(visible));
+  "'$('"'#tab-intervention').setAttribute('aria-pressed', String("'!visible));
+}
+$('"'#tab-settings').addEventListener('click', () => showSettings(true));
+"'$('"'#tab-intervention').addEventListener('click', () => showSettings(false));
+"'$('"'#show-token').addEventListener('change', event => { "'$('"'#td-token').type = event.target.checked ? 'text' : 'password'; });
+"'$('"'#settings-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const next = Object.fromEntries(new FormData(event.currentTarget));
+  next.dryRun = event.currentTarget.elements.namedItem('dryRun').checked;
+  try { saveSettings(next); settings = next; "'$('"'#settings-status').textContent = 'Réglages enregistrés sur cet appareil.'; }
+  catch (error) { "'$('"'#settings-status').textContent = "'`Enregistrement impossible : ${error.message}`; }
+});
+$('"'#export-pdf').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) printSafely(buildCerfaHtml(item, settings));
+});
+"'$('"'#export-bilan').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) printBilan(item);
+});
+"'$('"'#create-draft').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) createDraft(item);
+});
+fillSettings();
+'''
+open(p,'w').write(s)
+PY
+cat >> styles.css <<'EOF'
+nav { margin-bottom: 18px; }
+nav [aria-pressed=\"true\"] { border-color: #0f6b47; background: #d9f0e5; }
+select { font: inherit; width: 100%; min-height: 52px; background: white; border: 2px solid #707881; border-radius: 5px; padding: 10px; }
+.check { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.check input { width: 24px; min-height: 24px; height: 24px; flex-shrink: 0; }
+button:disabled { opacity: .6; cursor: default; }
+#send-status { overflow-wrap: anywhere; }
+EOF" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+exec
+/bin/bash -lc "cat > tests/spec2.test.js <<'EOF'
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildCerfaHtml } from '../js/cerfa.js';
+import { aggregateBilan, buildBilanHtml } from '../js/bilan.js';
+import { buildDraftBsffVariables, sendDraftBsff, GRAPHQL_CREATE_DRAFT_BSFF, ENDPOINTS } from '../js/trackdechets.js';
+import { loadQueue } from '../js/model.js';
+
+const intervention = { id: 'old_1', date: '2026-10-23', marque: 'Daikin', fluide: 'R32', chargeRecuperee: 2.35, nomSignataire: 'Camille Martin', client: 'Client A', status: 'pending' };
+const company = { siret: '12345678901234', name: 'Frigoriste', contact: undefined };
+
+test('buildCerfaHtml : équipement, signataire et mention obligatoire, HTML autonome', () => {
+  const html = buildCerfaHtml(intervention, company);
+  for (const value of ['Daikin', 'R32', '2.35', 'Camille Martin', 'Client A', company.siret, 'Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé.', 'A4 portrait', '12mm']) assert.ok(html.includes(value));
+  const escaped = buildCerfaHtml({ ...intervention, client: '<script>alert(1)</script>', signatureDataUrl: '\" onerror=\"alert(1)' });
+  assert.ok("'!escaped.includes('"'<script>'));
+  assert.ok("'!escaped.includes('"'onerror='));
+});
+
+test('aggregateBilan : filtre année, brouillons et fluides inconnus ; lignes et totaux exacts', () => {
+  const items = [intervention, { ...intervention, fluide: 'R410A', chargeRecuperee: 1.25 }, { ...intervention, date: '2025-10-23' }];
+  const bilan = aggregateBilan(items, 2026);
+  assert.equal(bilan.year, 2026);
+  assert.equal(bilan.count, 2);
+  assert.deepEqual(bilan.byFluid, { R32: { n: 1, kg: 2.35 }, R410A: { n: 1, kg: 1.25 } });
+  assert.equal(bilan.totalKg, 3.6);
+  const html = buildBilanHtml(bilan, company);
+  for (const value of ['2026-10-23', 'Client A', 'R410A', '3.60']) assert.ok(html.includes(value));
+  assert.equal(aggregateBilan([...items, { ...intervention, status: 'draft' }, { ...intervention, fluide: 'R22' }], 2026).count, 2);
+});
+
+test('buildDraftBsffVariables : type BSFF, SIRET et aucune valeur undefined récursive', () => {
+  function check(value) {
+    assert.notEqual(value, undefined);
+    if (value && typeof value === 'object') Object.values(value).forEach(check);
+  }
+  const variables = buildDraftBsffVariables(intervention, company);
+  check(variables);
+  check(buildDraftBsffVariables({}));
+  assert.equal(variables.input.type, 'BSFF');
+  assert.equal(variables.input.emitter.company.siret, company.siret);
+  assert.ok("'!Object.hasOwn(variables.input.emitter.company, '"'contact'));
+});
+
+test('sendDraftBsff : simulation par défaut sans aucun appel réseau', async () => {
+  let calls = 0;
+  const result = await sendDraftBsff(intervention, company, { fetchImpl: () => { calls++; throw new Error('Réseau interdit'); } });
+  assert.equal(result.ok, true);
+  assert.equal(result.dryRun, true);
+  assert.equal(result.body.query, GRAPHQL_CREATE_DRAFT_BSFF);
+  assert.deepEqual(result.body.variables, buildDraftBsffVariables(intervention, company));
+  assert.equal(calls, 0);
+});
+
+test('sendDraftBsff : mode réel sans jeton, erreur explicite et aucun réseau', async () => {
+  let calls = 0;
+  const result = await sendDraftBsff(intervention, company, { dryRun: false, fetchImpl: () => { calls++; } });
+  assert.deepEqual(result, { ok: false, error: 'jeton TrackDéchets manquant' });
+  assert.equal(calls, 0);
+});
+
+test('sendDraftBsff : POST GraphQL authentifié et identifiant retourné', async () => {
+  let calls = 0;
+  const result = await sendDraftBsff(intervention, company, { dryRun: false, token: 'secret', endpoint: ENDPOINTS.sandbox,
+    fetchImpl: async (endpoint, options) => {
+      calls++;
+      assert.equal(endpoint, ENDPOINTS.sandbox);
+      assert.equal(options.method, 'POST');
+      assert.equal(options.headers.Authorization, 'Bearer secret');
+      assert.equal(options.headers['Content-Type'], 'application/json');
+      const body = JSON.parse(options.body);
+      assert.deepEqual(body, { query: GRAPHQL_CREATE_DRAFT_BSFF, variables: buildDraftBsffVariables(intervention, company) });
+      assert.match(body.query, /createDraftBsff\\(input: \\"'$input'"\\)\\s*\\{\\s*id\\s*\\}/);
+      return new Response(JSON.stringify({ data: { createDraftBsff: { id: 'bsff_1' } } }));
+    } });
+  assert.deepEqual(result, { ok: true, id: 'bsff_1' });
+  assert.equal(calls, 1);
+});
+
+test('sendDraftBsff : erreurs GraphQL 200, HTTP et réseau remontées', async () => {
+  const send = fetchImpl => sendDraftBsff(intervention, company, { dryRun: false, token: 'secret', fetchImpl });
+  assert.deepEqual(await send(async () => new Response(JSON.stringify({ errors: [{ message: 'SIRET invalide' }] }))), { ok: false, error: 'SIRET invalide' });
+  for (const status of [400, 401, 500]) {
+    assert.deepEqual(await send(async () => new Response(JSON.stringify({ message: "'`Serveur ${status}` }), { status })), { ok: false, error: `Serveur ${status}` });
+  }
+  assert.deepEqual(await send(async () => { throw new Error('"'Hors connexion'); }), { ok: false, error: 'Hors connexion' });
+});
+
+test('migration : ancien format sans status relu pending, statuts persistés conservés', () => {
+  const { status, ...old } = intervention;
+  const items = [old, { ...intervention, id: 'created', status: 'draft-created', trackdechetsId: 'bsff_1', sentAt: '2026-10-23T10:00:00.000Z', lastError: null }, { ...intervention, id: 'error', status: 'error', lastError: 'SIRET invalide' }];
+  const loaded = loadQueue({ getItem: () => JSON.stringify(items) });
+  assert.equal(loaded[0].status, 'pending');
+  assert.deepEqual(loaded.slice(1), items.slice(1));
+});
+EOF
+node --test
+python3 - <<'PY'
+import importlib.util
+for m in ['playwright', 'websocket', 'requests']:
+ print(m, bool(importlib.util.find_spec(m)))
+PY" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+✔ validation étape 1 : charge strictement positive et fluide obligatoire (1.687111ms)
+✔ validation étape 2 : refuse un poids après supérieur au poids avant (4.36007ms)
+✔ chargeRecuperee : arrondit à deux décimales et interdit les poids invalides (0.76613ms)
+✔ loadQueue : tolère le JSON corrompu et relit une intervention persistée (7.56987ms)
+✔ toBsffPayload : structure stable et aucune valeur undefined, même imbriquée (0.39858ms)
+✔ toPrintableHtml : contient le signataire, la signature et la mention obligatoire (0.75349ms)
+✔ buildCerfaHtml : équipement, signataire et mention obligatoire, HTML autonome (0.89426ms)
+✔ aggregateBilan : filtre année, brouillons et fluides inconnus ; lignes et totaux exacts (0.771379ms)
+✔ buildDraftBsffVariables : type BSFF, SIRET et aucune valeur undefined récursive (0.167601ms)
+✔ sendDraftBsff : simulation par défaut sans aucun appel réseau (0.19003ms)
+✔ sendDraftBsff : mode réel sans jeton, erreur explicite et aucun réseau (0.11306ms)
+✔ sendDraftBsff : POST GraphQL authentifié et identifiant retourné (14.846099ms)
+✔ sendDraftBsff : erreurs GraphQL 200, HTTP et réseau remontées (0.889421ms)
+✔ migration : ancien format sans status relu pending, statuts persistés conservés (0.230639ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 87.858935
+playwright False
+websocket False
+requests False
+
+codex
+Les 14 tests passent, dont les six tests d’origine inchangés. Je vais maintenant vérifier le parcours dans Chromium : impression, bilan, simulation sans requête TrackDéchets, erreur sans jeton et fonctionnement hors ligne avec les nouveaux modules en cache.
+exec
+/bin/bash -lc "node -p 'process.version + \" WebSocket=\" + typeof WebSocket'; git diff --stat; rg -n 'TODO|fetch\\(|https?://' js sw.js; node --check js/app.js; python3 -m http.server 8765 --bind 127.0.0.1" in /data/.hermes/home/frigo/app
+exec
+/bin/bash -lc 'chromium --headless --no-sandbox --disable-gpu --remote-debugging-port=9222 --remote-allow-origins=http://localhost:9222 --user-data-dir=/tmp/frigo-spec2-browser about:blank' in /data/.hermes/home/frigo/app
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='js/trackdechets.js';s=open(p).read();s=s.replace(\"    const raw = await response.text();\\n    let data;\\n    try { data = JSON.parse(raw); } catch { data = {}; }\", \"    let raw = '';\\n    let data;\\n    if (typeof response.text === 'function') {\\n      raw = await response.text();\\n      try { data = JSON.parse(raw); } catch { data = {}; }\\n    } else {\\n      data = await response.json();\\n    }\")
+open(p,'w').write(s)
+PY
+cat > /tmp/frigo-spec2-check.mjs <<'EOF'
+import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+const targets = await (await fetch('http://127.0.0.1:9222/json')).json();
+const ws = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
+await new Promise(resolve => ws.addEventListener('open', resolve, { once: true }));
+let sequence = 0;
+const pending = new Map();
+const requests = [];
+const exceptions = [];
+ws.addEventListener('message', event => {
+  const msg = JSON.parse(event.data);
+  if (msg.id) {
+    const { resolve, reject } = pending.get(msg.id);
+    pending.delete(msg.id);
+    if (msg.error) reject(new Error(JSON.stringify(msg.error))); else resolve(msg.result);
+  }
+  if (msg.method === 'Network.requestWillBeSent') requests.push(msg.params.request.url);
+  if (msg.method === 'Runtime.exceptionThrown') exceptions.push(msg.params.exceptionDetails);
+});
+function cdp(method, params = {}) {
+  return new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params })); });
+}
+async function evaluate(expression) {
+  const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
+  if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+  return result.result.value;
+}
+async function until(expression) {
+  for (let n = 0; n < 100; n++) {
+    if (await evaluate(expression)) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error("'`Timeout: ${expression}`);
+}
+await cdp('"'Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable');
+await cdp('Page.navigate', { url: 'http://127.0.0.1:8765/' });
+await until("'`document.querySelector('"'#cache-status')?.textContent.includes('Disponible hors connexion')"'`);
+assert.equal(await evaluate(`document.querySelector('"'#queue-title').textContent"'`), '"'0 en attente · 0 brouillons créés · 0 erreurs');
+await evaluate("'`document.querySelector('"'#tab-settings').click();
+const f = document.querySelector('#settings-form');
+for (const [k, v] of Object.entries({siret:'12345678901234', name:'Entreprise Test', contact:'Contact Test', phone:'0102030405', mail:'test@example.fr', address:'12 rue Test'})) f.elements.namedItem(k).value=v;
+f.requestSubmit();"'`);
+assert.equal(await evaluate(`JSON.parse(localStorage.getItem('"'frigo.settings.v1')).dryRun"'`), true);
+assert.equal(await evaluate(`document.querySelector('"'#td-token').type"'`), '"'password');
+await evaluate("'`document.querySelector('"'#show-token').click()"'`);
+assert.equal(await evaluate(`document.querySelector('"'#td-token').type"'`), '"'text');
+await evaluate("'`document.querySelector('"'#tab-intervention').click();
+const f = document.querySelector('#intervention-form');
+for (const [k,v] of Object.entries({client:'Client Test',clientAdresse:'3 rue Client',marque:'Daikin',modele:'RXYQ12T',numeroSerie:'SN42',chargeTotale:'4.5'})) f.elements.namedItem(k).value=v;
+f.elements.namedItem('fluide').value='R32'; f.requestSubmit();"'`);
+assert.equal(await evaluate(`document.querySelector('"'[data-step=\"2\"]').hidden"'`), false);
+await evaluate(`const f = document.querySelector('"'#intervention-form');
+for (const [k,v] of Object.entries({typeOperation:'Maintenance',date:'2026-10-23',poidsAvant:'12.34',poidsApres:'4.10',longueurCircuit:'12'})) f.elements.namedItem(k).value=v;
+f.requestSubmit();document.querySelector('#nomSignataire').value='Camille Martin';document.querySelector('#signature').scrollIntoView();"'`);
+const rect = await evaluate(`(() => {const r=document.querySelector('"'#signature').getBoundingClientRect();return {x:r.x+30,y:r.y+30};})()"'`);
+await cdp('"'Input.dispatchMouseEvent', { type:'mousePressed', ...rect, button:'left', clickCount:1 });
+await cdp('Input.dispatchMouseEvent', { type:'mouseMoved', x:rect.x+80,y:rect.y+30, button:'left', buttons:1 });
+await cdp('Input.dispatchMouseEvent', { type:'mouseReleased', x:rect.x+80,y:rect.y+30,button:'left',clickCount:1 });
+await evaluate("'`document.querySelector('"'#intervention-form').requestSubmit()"'`);
+await until(`!document.querySelector('"'#confirmation').hidden"'`);
+assert.equal(await evaluate(`JSON.parse(localStorage.getItem('"'frigo.interventions.v1'))[0].chargeRecuperee"'`), 8.24);
+await evaluate(`window.printedDocuments=[]; const originalOpen=window.open.bind(window); window.open=(...args)=>{const popup=originalOpen(...args);popup.print=()=>window.printedDocuments.push(popup.document.documentElement.outerHTML);return popup;};document.querySelector('"'#export-pdf').click();"'`);
+await until(`window.printedDocuments.length===1`);
+const doc = await evaluate(`window.printedDocuments[0]`);
+for (const value of ['"'Client Test', 'Entreprise Test', '12345678901234', 'SN42', 'R32', '8.24', 'Camille Martin', 'data:image/png;base64,', 'Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé.', '12mm']) assert.ok(doc.includes(value), value);
+await evaluate("'`document.querySelector('"'#export-bilan').click()"'`);
+await until(`window.printedDocuments.length===2`);
+const bilan = await evaluate(`window.printedDocuments[1]`);
+for (const value of ['"'Bilan F-Gas 2026', 'Client Test', '8.24', '2026-10-23']) assert.ok(bilan.includes(value));
+const requestStart = requests.length;
+await evaluate("'`document.querySelector('"'#create-draft').click()"'`);
+await until(`document.querySelector('"'#send-status').textContent.includes('dry-run')"'`);
+assert.deepEqual(requests.slice(requestStart), []);
+assert.equal(await evaluate(`JSON.parse(localStorage.getItem('"'frigo.interventions.v1'))[0].status"'`), '"'pending');
+await evaluate("'`document.querySelector('"'#tab-settings').click();document.querySelector('#settings-form').elements.namedItem('dryRun').checked=false;document.querySelector('#settings-form').requestSubmit();document.querySelector('#tab-intervention').click();document.querySelector('#create-draft').click();"'`);
+await until(`document.querySelector('"'#send-status').textContent.includes('jeton TrackDéchets manquant')"'`);
+assert.deepEqual(requests.slice(requestStart), []);
+assert.equal(await evaluate(`JSON.parse(localStorage.getItem('"'frigo.interventions.v1'))[0].status"'`), '"'error');
+await evaluate("'`document.querySelector('"'#new-intervention').click()"'`);
+assert.equal(await evaluate(`document.querySelector('"'#queue-title').textContent"'`), '"'0 en attente · 0 brouillons créés · 1 erreurs');
+const cached = await evaluate("'`(async()=>{const c=await caches.open('"'frigo-shell-v3');return (await c.keys()).map(r=>new URL(r.url).pathname)})()"'`);
+for (const module of ['"'cerfa','bilan','trackdechets','settings']) assert.ok(cached.includes("'`/js/${module}.js`));
+await cdp('"'Network.emulateNetworkConditions', { offline:true,latency:0,downloadThroughput:0,uploadThroughput:0 });
+await cdp('Page.reload');
+await until("'`document.querySelector('"'#queue-title')?.textContent.includes('1 erreurs')"'`);
+assert.equal(await evaluate(`document.querySelector('"'#offline').hidden"'`), false);
+assert.equal(await evaluate(`document.querySelector('"'#cache-status').textContent"'`), '"'Disponible hors connexion sur cet appareil');
+assert.deepEqual(exceptions, []);
+await writeFile('/tmp/frigo-spec2-document.html', doc);
+await writeFile('/tmp/frigo-spec2-bilan.html', bilan);
+console.log('Chromium : parcours 3 étapes et signature, réglages persistés, exports et appel print(), bilan, dry-run sans requête, erreur sans jeton persistée, compteur et rechargement hors ligne : OK.');
+console.log('Cache : cerfa.js, bilan.js, trackdechets.js, settings.js présents. Exceptions JavaScript : 0.');
+ws.close();
+EOF
+node /tmp/frigo-spec2-check.mjs" in /data/.hermes/home/frigo/app
+ exited 1 in 84ms:
+file:///tmp/frigo-spec2-check.mjs:25
+  if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+                                     ^
+
+Error: {"exceptionId":1,"text":"Uncaught","lineNumber":0,"columnNumber":0,"scriptId":"15","exception":{"type":"object","subtype":"error","className":"SyntaxError","description":"SyntaxError: Identifier 'f' has already been declared","objectId":"950407257357519144.2.2"}}
+    at evaluate (file:///tmp/frigo-spec2-check.mjs:25:38)
+    at async file:///tmp/frigo-spec2-check.mjs:47:1
+
+Node.js v26.7.0
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='/tmp/frigo-spec2-check.mjs';s=open(p).read().replace(\"{ expression, awaitPromise: true\", \"{ expression: "'`(() => eval(${JSON.stringify(expression)}))()`, awaitPromise: true")
+open(p,'"'w').write(s)
+PY
+node /tmp/frigo-spec2-check.mjs" in /data/.hermes/home/frigo/app
+ succeeded in 436ms:
+Chromium : parcours 3 étapes et signature, réglages persistés, exports et appel print(), bilan, dry-run sans requête, erreur sans jeton persistée, compteur et rechargement hors ligne : OK.
+Cache : cerfa.js, bilan.js, trackdechets.js, settings.js présents. Exceptions JavaScript : 0.
+
+exec
+/bin/bash -lc "cat README.md; git diff -- js/model.js js/app.js sw.js index.html; command -v pdfinfo; command -v pdftoppm; command -v pdftotext; git diff --exit-code -- tests/model.test.js design-ref package.json; rg -n 'TODO' --glob '"'!codex2.log'"' ." in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
 # Frigo
 
 Assistant local en trois étapes pour une fiche d’intervention de fluides frigorigènes. HTML, CSS et modules JavaScript natifs, sans dépendance, sans compilation, sans police distante.
@@ -821,6 +1357,610 @@ Vérifications effectuées avec Node.js 26.7.0 et Chromium 155 en mode headless 
 Les contrôles de saisie et boutons ont au moins 52 px de hauteur, les libellés principaux 18 px, les couleurs de texte sont contrastées et le focus est visible. Les boutons d’incrémentation portent un nom accessible.
 
 Restent à vérifier sur matériel réel : installation PWA selon le navigateur, Safari/iOS et Firefox, signature tactile avec gants, lisibilité au soleil, audit complet au lecteur d’écran, impression physique et cycle de mise à jour entre deux versions déployées. Le fonctionnement hors ligne et la persistance ont été vérifiés dans Chromium, pas sur ces autres environnements.
-?? codex2.log
+diff --git a/index.html b/index.html
+index e4a3acb..51b3102 100644
+--- a/index.html
++++ b/index.html
+@@ -19,10 +19,30 @@
+     <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
+     <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
+   </header>
++  <nav class="export-actions" aria-label="Navigation"><button id="tab-intervention" type="button" aria-pressed="true">Intervention</button><button id="tab-settings" type="button" aria-pressed="false">Réglages</button></nav>
++  <section id="settings-panel" hidden aria-labelledby="settings-title">
++    <h2 id="settings-title">Réglages</h2>
++    <form id="settings-form">
++      <div class="field"><label for="company-siret">SIRET</label><input id="company-siret" name="siret" inputmode="numeric" pattern="[0-9]{14}" maxlength="14"></div>
++      <div class="field"><label for="company-name">Nom de l’entreprise</label><input id="company-name" name="name"></div>
++      <div class="field"><label for="company-contact">Contact</label><input id="company-contact" name="contact"></div>
++      <div class="field"><label for="company-phone">Téléphone</label><input id="company-phone" name="phone" type="tel"></div>
++      <div class="field"><label for="company-mail">Email</label><input id="company-mail" name="mail" type="email"></div>
++      <div class="field"><label for="company-address">Adresse</label><input id="company-address" name="address"></div>
++      <div class="field"><label for="td-token">Jeton TrackDéchets</label><input id="td-token" name="token" type="password" autocomplete="off"><label class="check"><input id="show-token" type="checkbox"> Afficher le jeton</label></div>
++      <div class="field"><label for="td-environment">Environnement</label><select id="td-environment" name="environment"><option value="sandbox">Bac à sable</option><option value="production">Production</option></select></div>
++      <label class="check"><input name="dryRun" type="checkbox" checked> Mode simulation</label>
++      <button type="submit" class="primary">Enregistrer les réglages</button>
++      <p id="settings-status" role="status"></p>
++    </form>
++  </section>
++  <div id="intervention-panel">
+   <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
+   <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
+   <form id="intervention-form" novalidate>
+     <section data-step="1" aria-labelledby="title">
++      <div class="field"><label for="client">Détenteur de l’équipement (client)</label><input id="client" name="client" autocomplete="organization"></div>
++      <div class="field"><label for="clientAdresse">Adresse du détenteur</label><input id="clientAdresse" name="clientAdresse" autocomplete="street-address"></div>
+       <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
+       <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
+       <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
+@@ -47,8 +67,9 @@
+       <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
+     </section>
+   </form>
+-  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
+-  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
++  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><div class="export-actions"><button id="export-pdf" type="button">Exporter en PDF</button><button id="export-bilan" type="button">Bilan F-Gas</button><button id="create-draft" type="button">Créer le brouillon TrackDéchets</button></div><p id="send-status" role="status">Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
++  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi manuel depuis cette liste</p><div id="queue-list"></div></aside>
++  </div>
+ </div>
+ </body>
+ </html>
+diff --git a/js/app.js b/js/app.js
+index 2c4d1b5..1bd9413 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -1,5 +1,13 @@
+-import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries, toBsffPayload, toPrintableHtml } from './model.js';
++import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries } from './model.js';
+ 
++import { buildCerfaHtml, printDoc } from './cerfa.js';
++import { aggregateBilan, buildBilanHtml } from './bilan.js';
++import { sendDraftBsff, ENDPOINTS } from './trackdechets.js';
++import { loadSettings, saveSettings } from './settings.js';
++
++let settings = loadSettings();
++let currentId = null;
++const sending = new Set();
+ const $ = selector => document.querySelector(selector);
+ const form = $('#intervention-form');
+ const canvas = $('#signature');
+@@ -69,25 +77,69 @@ function download(text, filename, type) {
+   setTimeout(() => URL.revokeObjectURL(url), 10000);
+ }
+ 
++function printSafely(html) {
++  try { Promise.resolve(printDoc(html)).catch(error => showError(error.message)); }
++  catch (error) { showError(error.message); }
++}
++
++function printBilan(item) {
++  printSafely(buildBilanHtml(aggregateBilan(queue, Number(item.date.slice(0, 4))), settings));
++}
++
++async function createDraft(item) {
++  if (sending.has(item.id) || item.trackdechetsId) return;
++  sending.add(item.id);
++  renderQueue();
++  $('#create-draft').disabled = sending.has(currentId);
++  $('#send-status').textContent = 'Traitement en cours…';
++  const result = await sendDraftBsff(item, settings, {
++    token: settings.token, endpoint: ENDPOINTS[settings.environment], dryRun: settings.dryRun,
++    fetchImpl: (...args) => window.fetch(...args)
++  });
++  let message;
++  if (result.dryRun) {
++    message = 'dry-run : simulation réussie, aucun envoi réseau. Statut en attente conservé.';
++  } else {
++    const updated = { ...item, status: result.ok ? 'draft-created' : 'error',
++      lastError: result.ok ? null : result.error, sentAt: result.ok ? new Date().toISOString() : item.sentAt ?? null,
++      trackdechetsId: result.ok ? result.id : item.trackdechetsId ?? null };
++    const next = queue.map(entry => entry.id === item.id ? updated : entry);
++    try { saveQueue(next); queue = next; }
++    catch (error) {
++      // Conserve aussi l’identifiant en mémoire pour éviter un second envoi.
++      queue = next;
++      showError(`Résultat TrackDéchets reçu mais stockage impossible : ${error.message}`);
++    }
++    message = result.ok ? `Brouillon créé : ${result.id}` : result.error;
++  }
++  $('#send-status').textContent = message;
++  sending.delete(item.id);
++  renderQueue();
++  $('#create-draft').disabled = Boolean(queue.find(entry => entry.id === currentId)?.trackdechetsId) || sending.has(currentId);
++}
++
+ function renderQueue() {
+-  $('#queue-title').textContent = `${queue.length} intervention${queue.length > 1 ? 's' : ''} en attente`;
++  const count = status => queue.filter(item => item.status === status).length;
++  $('#queue-title').textContent = `${count('pending')} en attente · ${count('draft-created')} brouillons créés · ${count('error')} erreurs`;
+   $('#queue-list').replaceChildren();
+   for (const item of queue) {
+     const article = document.createElement('article');
+     const title = document.createElement('p');
+-    title.textContent = `${item.marque} ${item.modele} · ${item.date}`;
++    title.textContent = `${item.marque} ${item.modele} · ${item.date} · ${item.status}${item.lastError ? ` · ${item.lastError}` : ''}${item.trackdechetsId ? ` · ${item.trackdechetsId}` : ''}`;
+     const actions = document.createElement('div');
+     actions.className = 'export-actions';
+-    for (const [label, suffix, content, type] of [
+-      ['Exporter JSON BSFF', 'bsff.json', () => JSON.stringify(toBsffPayload(item), null, 2), 'application/json'],
+-      ['Document imprimable', 'html', () => toPrintableHtml(item), 'text/html'],
+-      ['Sauvegarder la fiche', 'json', () => JSON.stringify(item, null, 2), 'application/json']
++    for (const [label, action] of [
++      ['Exporter en PDF', () => printSafely(buildCerfaHtml(item, settings))],
++      ['Bilan F-Gas', () => printBilan(item)],
++      ['Créer le brouillon TrackDéchets', () => createDraft(item)],
++      ['Sauvegarder la fiche', () => download(JSON.stringify(item, null, 2), `frigo-${item.id}.json`, 'application/json')]
+     ]) {
+       const button = document.createElement('button');
+       button.type = 'button';
+       button.textContent = label;
++      button.disabled = label === 'Créer le brouillon TrackDéchets' && (sending.has(item.id) || Boolean(item.trackdechetsId));
+       button.setAttribute('aria-label', `${label} : ${item.marque} ${item.modele}, ${item.date}`);
+-      button.addEventListener('click', () => download(content(), `frigo-${item.id}.${suffix}`, type));
++      button.addEventListener('click', action);
+       actions.append(button);
+     }
+     article.append(title, actions);
+@@ -176,6 +228,9 @@ form.addEventListener('submit', event => {
+     const nextQueue = [...queue, intervention];
+     saveQueue(nextQueue);
+     queue = nextQueue;
++    currentId = intervention.id;
++    $('#send-status').textContent = 'Aucun envoi à TrackDéchets n’a été effectué.';
++    $('#create-draft').disabled = false;
+     renderQueue();
+     form.hidden = true;
+     $('#queue').hidden = false;
+@@ -201,7 +256,7 @@ $('#new-intervention').addEventListener('click', () => {
+ function updateOnline() { $('#offline').hidden = navigator.onLine !== false; }
+ window.addEventListener('online', updateOnline);
+ window.addEventListener('offline', updateOnline);
+-window.addEventListener('storage', () => { queue = loadQueue(); renderQueue(); });
++window.addEventListener('storage', () => { queue = loadQueue(); settings = loadSettings(); fillSettings(); renderQueue(); });
+ setDate();
+ clearSignature();
+ updateOnline();
+@@ -219,3 +274,40 @@ if ('serviceWorker' in navigator) {
+ } else {
+   $('#cache-status').textContent = 'Ce navigateur ne permet pas le mode hors ligne.';
+ }
++
++function fillSettings() {
++  const fields = $('#settings-form').elements;
++  for (const [key, value] of Object.entries(settings)) {
++    if (key === 'dryRun') fields.namedItem(key).checked = value;
++    else fields.namedItem(key).value = value;
++  }
++}
++function showSettings(visible) {
++  $('#settings-panel').hidden = !visible;
++  $('#intervention-panel').hidden = visible;
++  $('#tab-settings').setAttribute('aria-pressed', String(visible));
++  $('#tab-intervention').setAttribute('aria-pressed', String(!visible));
++}
++$('#tab-settings').addEventListener('click', () => showSettings(true));
++$('#tab-intervention').addEventListener('click', () => showSettings(false));
++$('#show-token').addEventListener('change', event => { $('#td-token').type = event.target.checked ? 'text' : 'password'; });
++$('#settings-form').addEventListener('submit', event => {
++  event.preventDefault();
++  const next = Object.fromEntries(new FormData(event.currentTarget));
++  next.dryRun = event.currentTarget.elements.namedItem('dryRun').checked;
++  try { saveSettings(next); settings = next; $('#settings-status').textContent = 'Réglages enregistrés sur cet appareil.'; }
++  catch (error) { $('#settings-status').textContent = `Enregistrement impossible : ${error.message}`; }
++});
++$('#export-pdf').addEventListener('click', () => {
++  const item = queue.find(entry => entry.id === currentId);
++  if (item) printSafely(buildCerfaHtml(item, settings));
++});
++$('#export-bilan').addEventListener('click', () => {
++  const item = queue.find(entry => entry.id === currentId);
++  if (item) printBilan(item);
++});
++$('#create-draft').addEventListener('click', () => {
++  const item = queue.find(entry => entry.id === currentId);
++  if (item) createDraft(item);
++});
++fillSettings();
+diff --git a/js/model.js b/js/model.js
+index 3719208..4a124a4 100644
+--- a/js/model.js
++++ b/js/model.js
+@@ -33,20 +33,20 @@ export function createIntervention(data, signatureDataUrl, { id = globalThis.cry
+   if (Object.keys(errors).length) throw new Error(Object.values(errors).join(' '));
+   if (!present(data.nomSignataire) || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureDataUrl)) throw new Error('Le nom et la signature sont obligatoires.');
+   return {
+-    id, createdAt, marque: data.marque.trim(), modele: data.modele.trim(),
++    id, createdAt, client: String(data.client ?? '').trim(), clientAdresse: String(data.clientAdresse ?? '').trim(), marque: data.marque.trim(), modele: data.modele.trim(),
+     numeroSerie: String(data.numeroSerie ?? '').trim(), fluide: data.fluide,
+     chargeTotale: Number(data.chargeTotale), typeOperation: data.typeOperation, date: data.date,
+     poidsAvant: Number(data.poidsAvant), poidsApres: Number(data.poidsApres),
+     chargeRecuperee: chargeRecuperee(data.poidsAvant, data.poidsApres),
+     longueurCircuit: data.longueurCircuit === '' || data.longueurCircuit == null ? null : Number(data.longueurCircuit),
+-    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending'
++    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending', lastError: null, sentAt: null, trackdechetsId: null
+   };
+ }
+ 
+ export function loadQueue(storage) {
+   try {
+     const queue = JSON.parse((storage ?? globalThis.localStorage).getItem(QUEUE_KEY) ?? '[]');
+-    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending') : [];
++    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && [undefined, 'pending', 'draft-created', 'error', 'draft'].includes(item.status)).map(item => ({ ...item, status: item.status ?? 'pending' })) : [];
+   } catch {
+     return [];
+   }
+@@ -70,6 +70,7 @@ export function summaryEntries(data) {
+   let recovered = '—';
+   try { recovered = `${chargeRecuperee(data.poidsAvant, data.poidsApres).toFixed(2)} kg`; } catch { /* Saisie encore incomplète. */ }
+   return [
++    ['Détenteur', data.client || 'Non renseigné'], ['Adresse du détenteur', data.clientAdresse || 'Non renseignée'],
+     ['Marque', data.marque], ['Modèle', data.modele], ['Numéro de série', data.numeroSerie || 'Non renseigné'],
+     ['Fluide', data.fluide], ['Charge totale', `${data.chargeTotale} kg`], ['Opération', data.typeOperation],
+     ['Date', data.date], ['Poids avant', `${data.poidsAvant} kg`], ['Poids après', `${data.poidsApres} kg`],
+diff --git a/sw.js b/sw.js
+index f4cd261..a9259ed 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,12 +1,16 @@
+ // Service worker : app shell en cache, mise à jour propre.
+ // Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
+-const CACHE = 'frigo-shell-v2';
++const CACHE = 'frigo-shell-v3';
+ const ASSETS = [
+   './',
+   './index.html',
+   './styles.css',
+   './js/app.js',
+   './js/model.js',
++  './js/cerfa.js',
++  './js/bilan.js',
++  './js/trackdechets.js',
++  './js/settings.js',
+   './manifest.webmanifest',
+ ];
+ 
+./SPEC2.md:78:- Aucun `TODO`, aucune fonction vide, zéro dépendance npm.
+./SPEC.md:56:- Le code ne contient ni `TODO` ni fonction vide.
 
+codex
+Le parcours Chromium est validé : la simulation et l’essai sans jeton n’émettent aucune requête, l’erreur est persistée, et l’application se recharge hors ligne avec les quatre nouveaux modules en cache. Les deux exports déclenchent bien `print()` et contiennent les données attendues. Je termine la revue du code et la mise à jour du README.
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='js/cerfa.js';s=open(p).read().replace('.catch(() => {})', '.catch(() => false)');open(p,'w').write(s)
+p='js/model.js';s=open(p).read().replace(\"// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l'intégration.\", \"// Export historique conservé pour compatibilité ; aucun envoi réseau ne l’utilise.\")
+open(p,'w').write(s)
+p='js/app.js';s=open(p).read().replace('const sending = new Set();', 'const sending = new Set();\\nconst sendMessages = new Map();')
+s=s.replace(\"  "'$('"'#send-status').textContent = message;\", \"  "'$('"'#send-status').textContent = message;\\n  sendMessages.set(item.id, message);\")
+s=s.replace('    article.append(title, actions);', '''    const feedback = document.createElement('p');
+    feedback.setAttribute('role', 'status');
+    feedback.textContent = sendMessages.get(item.id) || '';
+    feedback.hidden = "'!feedback.textContent;
+    article.append(title, actions, feedback);'"''')
+open(p,'w').write(s)
+PY
+cat > README.md <<'EOF'
+# Frigo
+
+Assistant local en trois étapes pour les interventions sur fluides frigorigènes. HTML, CSS et modules JavaScript natifs, sans backend, dépendance npm ni compilation.
+
+## Lancer et tester
+
+"'```sh
+python3 -m http.server 8080
+```
+
+Ouvrir http://localhost:8080/ et attendre « Disponible hors connexion sur cet appareil ». Le premier chargement nécessite une connexion ; le service worker exige localhost ou HTTPS.
+
+Avec Node.js 22 ou ultérieur :
+
+```sh
+node --test
+```
+
+Les 14 tests comprennent les six tests d’origine inchangés et huit tests couvrant le document imprimable, le bilan annuel, les variables GraphQL sans `undefined`, la simulation sans réseau, l’absence de jeton, les réponses GraphQL et HTTP et la migration des anciennes fiches. Le transport des tests est injecté et n’appelle aucun service externe.
+
+## Utiliser
+
+1. Dans **Réglages**, enregistrer SIRET, nom, contact, téléphone, email et adresse de l’entreprise. Le jeton TrackDéchets est masqué et peut être affiché. Choisir Bac à sable ou Production ; **Mode simulation** est coché par défaut.
+2. Renseigner le détenteur de l’équipement et son adresse, puis marque, modèle, fluide et charge totale. Le numéro de série est facultatif.
+3. Choisir le type d’intervention, la date, les poids avant/après et éventuellement la longueur du circuit. La charge récupérée est la différence des poids arrondie à deux décimales.
+4. Indiquer le signataire, tracer sa signature et enregistrer. La confirmation et la liste locale proposent les actions suivantes.
+
+- **Exporter en PDF** ouvre un document HTML autonome puis la boîte d’impression du navigateur : choisir l’enregistrement en PDF. Format A4 portrait, marges de 12 mm, mesures en tableau noir et blanc, signature PNG. Il porte la mention « Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé. »
+- **Bilan F-Gas** imprime les interventions de l’année de la fiche choisie, avec date, client, fluide, kg récupérés et totaux. Les fiches de statut `draft` et les fluides inconnus sont exclus. Les statuts d’envoi n’excluent pas les interventions terminées.
+- **Créer le brouillon TrackDéchets** simule par défaut et affiche `dry-run` sans réseau ni création de brouillon réel. Le statut local est conservé. Pour envoyer, enregistrer un jeton et décocher la simulation, puis cliquer explicitement sur ce bouton.
+- **Sauvegarder la fiche** télécharge son JSON complet, signature et métadonnées comprises.
+
+## TrackDéchets
+
+`js/trackdechets.js` construit uniquement la mutation GraphQL `createDraftBsff(input: BsffInput!) { id }`. Le corps envoyé est `{ query, variables }`, avec `input.type: "BSFF"` et les coordonnées connues de l’émetteur. Les champs inconnus sont omis. Aucun POST REST métier ni création de BSFF complet n’est implémenté. Le bureau complète le brouillon dans TrackDéchets.
+
+Environnements :
+
+- Bac à sable : `https://api.sandbox.trackdechets.beta.gouv.fr`
+- Production : `https://api.trackdechets.beta.gouv.fr`
+
+Tout appel métier passe par `sendDraftBsff` avec `fetchImpl` explicitement injecté. L’import des modules, le retour du réseau et la lecture de la file ne déclenchent aucun envoi. Sans jeton en mode réel, une erreur claire apparaît et le statut devient `error`, sans réseau. Les erreurs HTTP, GraphQL et réseau sont remontées. Une réussite persiste `draft-created`, `trackdechetsId`, `sentAt` et efface `lastError`. Le bouton est ensuite désactivé pour cette fiche.
+
+L’ancien utilitaire `toBsffPayload` reste disponible pour compatibilité avec les six tests d’origine ; il n’est utilisé par aucun envoi.
+
+## Stockage et hors ligne
+
+Les interventions sont conservées sous `frigo.interventions.v1`, les réglages sous `frigo.settings.v1`, dans `localStorage`. Une ancienne fiche sans `status` est lue comme `pending`. Les fiches en erreur et les brouillons créés restent disponibles après rechargement. Le premier écran affiche les trois compteurs.
+
+Les données, signatures et le jeton sont stockés localement sans chiffrement. Le stockage dépend du navigateur et de l’origine ; exporter les fiches pour les sauvegarder. Les écritures impossibles sont signalées. Les saisies non enregistrées ne survivent pas au rechargement. L’importation et la suppression des fiches ne sont pas proposés.
+
+`sw.js` met en cache l’application et tous ses modules, y compris `cerfa.js`, `bilan.js`, `trackdechets.js` et `settings.js`. Le cache est `frigo-shell-v3`. L’installation prépare le cache, active le nouveau worker et supprime les anciens caches. Les ressources GET utilisent le cache et les navigations essaient le réseau avec repli sur le document local. Le service worker n’intercepte aucun POST.
+
+## Definition of Done vérifiée
+
+- `node --test` : 14 tests, 0 échec ; les six tests d’origine sont inchangés.
+- Chromium headless : parcours des trois étapes avec signature par événements pointeur, persistance des réglages et des fiches, contenu des deux exports et appel de `print()`.
+- Observation réseau Chromium : aucune requête lors de la simulation, ni lors de l’essai réel sans jeton ; message explicite et statut `error` persisté.
+- Vérification du cache des quatre nouveaux modules et rechargement hors ligne avec fiche et compteur conservés ; aucune exception JavaScript pendant le parcours.
+- Aucun marqueur de travail restant ni fonction vide dans le code ajouté ; aucune dépendance npm ; `design-ref/` préservé.
+
+Non vérifiés : création sur les services TrackDéchets réels (aucun jeton utilisé), impression physique, Safari/iOS et Firefox, installation PWA sur appareil et mise à jour entre deux versions déployées. Les documents sont des documents de travail et ne constituent pas un formulaire officiel ou une signature électronique certifiée.
+EOF
+node --test' in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+✔ validation étape 1 : charge strictement positive et fluide obligatoire (1.041969ms)
+✔ validation étape 2 : refuse un poids après supérieur au poids avant (4.043767ms)
+✔ chargeRecuperee : arrondit à deux décimales et interdit les poids invalides (0.441011ms)
+✔ loadQueue : tolère le JSON corrompu et relit une intervention persistée (2.982898ms)
+✔ toBsffPayload : structure stable et aucune valeur undefined, même imbriquée (0.287399ms)
+✔ toPrintableHtml : contient le signataire, la signature et la mention obligatoire (0.3377ms)
+✔ buildCerfaHtml : équipement, signataire et mention obligatoire, HTML autonome (0.93453ms)
+✔ aggregateBilan : filtre année, brouillons et fluides inconnus ; lignes et totaux exacts (0.891069ms)
+✔ buildDraftBsffVariables : type BSFF, SIRET et aucune valeur undefined récursive (0.21097ms)
+✔ sendDraftBsff : simulation par défaut sans aucun appel réseau (0.21306ms)
+✔ sendDraftBsff : mode réel sans jeton, erreur explicite et aucun réseau (0.114869ms)
+✔ sendDraftBsff : POST GraphQL authentifié et identifiant retourné (17.557461ms)
+✔ sendDraftBsff : erreurs GraphQL 200, HTTP et réseau remontées (0.782309ms)
+✔ migration : ancien format sans status relu pending, statuts persistés conservés (0.28202ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 77.620246
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='/tmp/frigo-spec2-check.mjs';s=open(p).read().replace(\"targets.find(t => t.type === 'page')\", \"targets.find(t => t.type === 'page' && t.url.startsWith('http'))\")
+s=s.replace(\"await cdp('Page.navigate',\", \"await cdp('Storage.clearDataForOrigin', { origin: 'http://127.0.0.1:8765', storageTypes: 'all' });\\nawait cdp('Page.navigate',\", 1)
+open(p,'w').write(s)
+PY
+node /tmp/frigo-spec2-check.mjs
+node --check js/cerfa.js
+node --check js/bilan.js
+node --check js/trackdechets.js
+node --check js/settings.js
+git diff --check
+git diff --exit-code -- tests/model.test.js design-ref package.json
+git status --short" in /data/.hermes/home/frigo/app
+ succeeded in 5545ms:
+Chromium : parcours 3 étapes et signature, réglages persistés, exports et appel print(), bilan, dry-run sans requête, erreur sans jeton persistée, compteur et rechargement hors ligne : OK.
+Cache : cerfa.js, bilan.js, trackdechets.js, settings.js présents. Exceptions JavaScript : 0.
+codex2.log:1414: trailing whitespace.
++ 
+codex2.log:1429: trailing whitespace.
++ 
+codex2.log:1582: trailing whitespace.
++ 
+codex2.log:1620: trailing whitespace.
++ 
+ M README.md
+ M codex2.log
+ M index.html
+ M js/app.js
+ M js/model.js
+ M styles.css
+ M sw.js
+?? js/bilan.js
+?? js/cerfa.js
+?? js/settings.js
+?? js/trackdechets.js
+?? tests/spec2.test.js
+
+exec
+/bin/bash -lc "cat > /tmp/frigo-spec2-print.mjs <<'EOF'
+import { writeFile } from 'node:fs/promises';
+const targets = await (await fetch('http://127.0.0.1:9222/json')).json();
+const target = targets.find(t => t.type === 'page' && t.title === 'Frigo — Document de travail');
+if ("'!target) throw new Error('"'Document absent');
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+await new Promise(r => ws.addEventListener('open', r, { once:true }));
+let id=0;const pending=new Map();
+ws.addEventListener('message', e=>{const m=JSON.parse(e.data);if(m.id){pending.get(m.id)(m.result);pending.delete(m.id);}});
+function call(method,params={}) {return new Promise(resolve=>{pending.set(++id,resolve);ws.send(JSON.stringify({id,method,params}));});}
+const pdf=await call('Page.printToPDF',{preferCSSPageSize:true,printBackground:true,displayHeaderFooter:false});
+const buf=Buffer.from(pdf.data,'base64');await writeFile('/tmp/frigo-spec2-document.pdf',buf);
+const source=buf.toString('latin1');
+console.log('PDF Chromium :', (source.match(/\\/Type \\/Page\\b/g)||[]).length, 'page(s) ;', source.match(/\\/MediaBox \\[["'^'"\\]]+\\]/)?.[0]);
+await call('Emulation.setDeviceMetricsOverride',{width:794,height:1123,deviceScaleFactor:1,mobile:false});
+await call('Emulation.setEmulatedMedia',{media:'print'});
+const screenshot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});
+await writeFile('/tmp/frigo-spec2-document.png',Buffer.from(screenshot.data,'base64'));
+ws.close();
+EOF
+node /tmp/frigo-spec2-print.mjs" in /data/.hermes/home/frigo/app
+2026-10-23T11:48:01.941683Z ERROR codex_core::tools::router: error=unable to locate image at `/tmp/frigo-spec2-document.png`: No such file or directory (os error 2)
+exec
+/bin/bash -lc "git diff --check -- README.md index.html js styles.css sw.js tests
+rg -n 'TODO|=>\\s*\\{\\s*\\}|function["'^'"\\n]*\\{\\s*\\}' js tests sw.js || true
+node --test > /tmp/frigo-spec2-node-test.txt
+cat /tmp/frigo-spec2-node-test.txt" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+js/trackdechets.js:10:export function buildDraftBsffVariables(intervention, company = {}) {
+js/trackdechets.js:17:export async function sendDraftBsff(intervention, company, { token, endpoint = ENDPOINTS.sandbox, dryRun = true, fetchImpl } = {}) {
+js/app.js:32:function showError(message, fields = {}) {
+js/cerfa.js:13:export function buildCerfaHtml(intervention, company = {}) {
+js/bilan.js:20:export function buildBilanHtml(bilan, company = {}) {
+js/model.js:31:export function createIntervention(data, signatureDataUrl, { id = globalThis.crypto.randomUUID(), createdAt = new Date().toISOString() } = {}) {
+✔ validation étape 1 : charge strictement positive et fluide obligatoire (1.369449ms)
+✔ validation étape 2 : refuse un poids après supérieur au poids avant (4.128246ms)
+✔ chargeRecuperee : arrondit à deux décimales et interdit les poids invalides (0.428051ms)
+✔ loadQueue : tolère le JSON corrompu et relit une intervention persistée (3.564167ms)
+✔ toBsffPayload : structure stable et aucune valeur undefined, même imbriquée (0.382279ms)
+✔ toPrintableHtml : contient le signataire, la signature et la mention obligatoire (0.484ms)
+✔ buildCerfaHtml : équipement, signataire et mention obligatoire, HTML autonome (1.163949ms)
+✔ aggregateBilan : filtre année, brouillons et fluides inconnus ; lignes et totaux exacts (0.891969ms)
+✔ buildDraftBsffVariables : type BSFF, SIRET et aucune valeur undefined récursive (0.23984ms)
+✔ sendDraftBsff : simulation par défaut sans aucun appel réseau (0.347819ms)
+✔ sendDraftBsff : mode réel sans jeton, erreur explicite et aucun réseau (0.209091ms)
+✔ sendDraftBsff : POST GraphQL authentifié et identifiant retourné (19.423276ms)
+✔ sendDraftBsff : erreurs GraphQL 200, HTTP et réseau remontées (0.967988ms)
+✔ migration : ancien format sans status relu pending, statuts persistés conservés (0.302011ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92.602402
+
+codex
+La Definition of Done est vérifiée pour les tests et le parcours Chromium. Le PDF généré tient sur une page A4 ; le mode hors ligne fonctionne et les fichiers modifiés passent la vérification de formatage. Restent non vérifiés : l’envoi à TrackDéchets avec un vrai jeton, l’impression physique et les autres navigateurs.
+ exited 143 in 46231ms:
+PDF Chromium : 1 page(s) ; /MediaBox [0 0 594.95996 841.91998]
+
+ exited 143 in 257550ms:
+v26.7.0 WebSocket=function
+ codex2.log  | 1129 ++++++++++++++++++++++++++++++++++++++---------------------
+ index.html  |   25 +-
+ js/app.js   |  110 +++++-
+ js/model.js |    7 +-
+ styles.css  |    7 +
+ sw.js       |    6 +-
+ 6 files changed, 874 insertions(+), 410 deletions(-)
+sw.js:41:        const fresh = await fetch(request);
+sw.js:59:      const fresh = await fetch(request);
+js/trackdechets.js:2:  sandbox: 'https://api.sandbox.trackdechets.beta.gouv.fr',
+js/trackdechets.js:3:  production: 'https://api.trackdechets.beta.gouv.fr'
+js/app.js:97:    fetchImpl: (...args) => window.fetch(...args)
+Serving HTTP on 127.0.0.1 port 8765 (http://127.0.0.1:8765/) ...
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/model.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/cerfa.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/bilan.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/trackdechets.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/settings.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /manifest.webmanifest HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /sw.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:45:30] "GET /js/trackdechets.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:45:41] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:45:43] "GET /sw.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/model.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/cerfa.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/bilan.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/trackdechets.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /js/settings.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /sw.js HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:36] "GET /index.html HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:41] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [23/Oct/2026 11:47:43] "GET /sw.js HTTP/1.1" 304 -
+
+exec
+/bin/bash -lc "pkill -f '"'^node /tmp/frigo-spec2-print.mjs$'"' || true
+kill 312836
+pkill -f '"'^python3 -m http.server 8765 --bind 127.0.0.1$'"' || true" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+ succeeded in 256436ms:
+[312836:312864:1023/114421.827016:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312864:1023/114421.827239:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.851551:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312864:1023/114421.851665:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312864:1023/114421.851683:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312864:1023/114421.851690:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.851698:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.856723:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.882460:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+
+DevTools listening on ws://127.0.0.1:9222/devtools/browser/fa77e82a-697d-41ce-b64a-a474733e8612
+[312836:312836:1023/114421.940198:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312836:1023/114421.940301:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.940296:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.940319:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312836:1023/114421.940387:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312836:1023/114421.942672:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.943164:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312864:1023/114421.971553:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312836:1023/114421.971565:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.971583:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[312836:312836:1023/114421.971695:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.971725:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312836:1023/114421.975121:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312836:1023/114421.984097:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: unknown error type: 
+[312836:312836:1023/114421.984329:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.984420:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312836:1023/114421.995803:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312864:1023/114421.995910:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[312836:312836:1023/114422.003820:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[312836:312866:1023/114425.082125:ERROR:google_apis/gcm/engine/mcs_client.cc:702]   Error code: 401  Error message: Authentication Failed: wrong_secret
+[312836:312866:1023/114425.082143:ERROR:google_apis/gcm/engine/mcs_client.cc:704] Failed to log in to GCM, resetting connection.
+[312836:312866:1023/114425.090096:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[312836:312866:1023/114425.117324:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[312836:312866:1023/114425.119135:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[312836:312866:1023/114454.765297:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[312836:312866:1023/114544.157333:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+Warning: vkCreateInstance: Found no drivers!
+Warning: vkCreateInstance failed with VK_ERROR_INCOMPATIBLE_DRIVER
+    at CheckVkSuccessImpl (../../third_party/dawn/src/dawn/native/vulkan/VulkanError.cpp:106)
+
+[312836:312866:1023/114726.884696:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+
+codex
+Implémenté en GraphQL, sans dépendance npm. Les six tests d’origine sont inchangés.
+
+- Créés : `js/cerfa.js`, `js/bilan.js`, `js/trackdechets.js`, `js/settings.js`, `tests/spec2.test.js`.
+- Modifiés : `index.html`, `js/app.js`, `js/model.js`, `styles.css`, `sw.js`, `README.md`.
+
+[Sortie exacte complète de `node --test`](/tmp/frigo-spec2-node-test.txt), terminée par :
+
+```text
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92.602402
+```
+
+DoD vérifiée dans Chromium : parcours signé, exports, PDF A4, simulation sans réseau, erreur sans jeton persistée et rechargement hors ligne.
+
+Non vérifiés : API avec vrai jeton, impression physique, autres navigateurs, installation PWA sur appareil et mise à jour déployée.
+tokens used
+70,815
+Implémenté en GraphQL, sans dépendance npm. Les six tests d’origine sont inchangés.
+
+- Créés : `js/cerfa.js`, `js/bilan.js`, `js/trackdechets.js`, `js/settings.js`, `tests/spec2.test.js`.
+- Modifiés : `index.html`, `js/app.js`, `js/model.js`, `styles.css`, `sw.js`, `README.md`.
+
+[Sortie exacte complète de `node --test`](/tmp/frigo-spec2-node-test.txt), terminée par :
+
+```text
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92.602402
+```
+
+DoD vérifiée dans Chromium : parcours signé, exports, PDF A4, simulation sans réseau, erreur sans jeton persistée et rechargement hors ligne.
+
+Non vérifiés : API avec vrai jeton, impression physique, autres navigateurs, installation PWA sur appareil et mise à jour déployée.
 EXIT=0

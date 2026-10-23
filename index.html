@@ -19,10 +19,30 @@
     <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
     <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
   </header>
+  <nav class="export-actions" aria-label="Navigation"><button id="tab-intervention" type="button" aria-pressed="true">Intervention</button><button id="tab-settings" type="button" aria-pressed="false">Réglages</button></nav>
+  <section id="settings-panel" hidden aria-labelledby="settings-title">
+    <h2 id="settings-title">Réglages</h2>
+    <form id="settings-form">
+      <div class="field"><label for="company-siret">SIRET</label><input id="company-siret" name="siret" inputmode="numeric" pattern="[0-9]{14}" maxlength="14"></div>
+      <div class="field"><label for="company-name">Nom de l’entreprise</label><input id="company-name" name="name"></div>
+      <div class="field"><label for="company-contact">Contact</label><input id="company-contact" name="contact"></div>
+      <div class="field"><label for="company-phone">Téléphone</label><input id="company-phone" name="phone" type="tel"></div>
+      <div class="field"><label for="company-mail">Email</label><input id="company-mail" name="mail" type="email"></div>
+      <div class="field"><label for="company-address">Adresse</label><input id="company-address" name="address"></div>
+      <div class="field"><label for="td-token">Jeton TrackDéchets</label><input id="td-token" name="token" type="password" autocomplete="off"><label class="check"><input id="show-token" type="checkbox"> Afficher le jeton</label></div>
+      <div class="field"><label for="td-environment">Environnement</label><select id="td-environment" name="environment"><option value="sandbox">Bac à sable</option><option value="production">Production</option></select></div>
+      <label class="check"><input name="dryRun" type="checkbox" checked> Mode simulation</label>
+      <button type="submit" class="primary">Enregistrer les réglages</button>
+      <p id="settings-status" role="status"></p>
+    </form>
+  </section>
+  <div id="intervention-panel">
   <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
   <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
   <form id="intervention-form" novalidate>
     <section data-step="1" aria-labelledby="title">
+      <div class="field"><label for="client">Détenteur de l’équipement (client)</label><input id="client" name="client" autocomplete="organization"></div>
+      <div class="field"><label for="clientAdresse">Adresse du détenteur</label><input id="clientAdresse" name="clientAdresse" autocomplete="street-address"></div>
       <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
       <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
       <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
@@ -47,8 +67,9 @@
       <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
     </section>
   </form>
-  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
-  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
+  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><div class="export-actions"><button id="export-pdf" type="button">Exporter en PDF</button><button id="export-bilan" type="button">Bilan F-Gas</button><button id="create-draft" type="button">Créer le brouillon TrackDéchets</button></div><p id="send-status" role="status">Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
+  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi manuel depuis cette liste</p><div id="queue-list"></div></aside>
+  </div>
 </div>
 </body>
 </html>

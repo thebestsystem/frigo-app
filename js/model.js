@@ -33,20 +33,20 @@ export function createIntervention(data, signatureDataUrl, { id = globalThis.cry
   if (Object.keys(errors).length) throw new Error(Object.values(errors).join(' '));
   if (!present(data.nomSignataire) || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureDataUrl)) throw new Error('Le nom et la signature sont obligatoires.');
   return {
-    id, createdAt, marque: data.marque.trim(), modele: data.modele.trim(),
+    id, createdAt, client: String(data.client ?? '').trim(), clientAdresse: String(data.clientAdresse ?? '').trim(), marque: data.marque.trim(), modele: data.modele.trim(),
     numeroSerie: String(data.numeroSerie ?? '').trim(), fluide: data.fluide,
     chargeTotale: Number(data.chargeTotale), typeOperation: data.typeOperation, date: data.date,
     poidsAvant: Number(data.poidsAvant), poidsApres: Number(data.poidsApres),
     chargeRecuperee: chargeRecuperee(data.poidsAvant, data.poidsApres),
     longueurCircuit: data.longueurCircuit === '' || data.longueurCircuit == null ? null : Number(data.longueurCircuit),
-    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending'
+    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending', lastError: null, sentAt: null, trackdechetsId: null
   };
 }
 
 export function loadQueue(storage) {
   try {
     const queue = JSON.parse((storage ?? globalThis.localStorage).getItem(QUEUE_KEY) ?? '[]');
-    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending') : [];
+    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && [undefined, 'pending', 'draft-created', 'error', 'draft'].includes(item.status)).map(item => ({ ...item, status: item.status ?? 'pending' })) : [];
   } catch {
     return [];
   }
@@ -56,7 +56,7 @@ export function saveQueue(queue, storage = globalThis.localStorage) {
   storage.setItem(QUEUE_KEY, JSON.stringify(queue));
 }
 
-// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l'intégration.
+// Export historique conservé pour compatibilité ; aucun envoi réseau ne l’utilise.
 export function toBsffPayload(intervention) {
   const value = Number(intervention.chargeRecuperee ?? 0);
   return {
@@ -70,6 +70,7 @@ export function summaryEntries(data) {
   let recovered = '—';
   try { recovered = `${chargeRecuperee(data.poidsAvant, data.poidsApres).toFixed(2)} kg`; } catch { /* Saisie encore incomplète. */ }
   return [
+    ['Détenteur', data.client || 'Non renseigné'], ['Adresse du détenteur', data.clientAdresse || 'Non renseignée'],
     ['Marque', data.marque], ['Modèle', data.modele], ['Numéro de série', data.numeroSerie || 'Non renseigné'],
     ['Fluide', data.fluide], ['Charge totale', `${data.chargeTotale} kg`], ['Opération', data.typeOperation],
     ['Date', data.date], ['Poids avant', `${data.poidsAvant} kg`], ['Poids après', `${data.poidsApres} kg`],

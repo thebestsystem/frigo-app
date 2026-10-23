@@ -1,12 +1,16 @@
 // Service worker : app shell en cache, mise à jour propre.
 // Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
-const CACHE = 'frigo-shell-v2';
+const CACHE = 'frigo-shell-v3';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './js/app.js',
   './js/model.js',
+  './js/cerfa.js',
+  './js/bilan.js',
+  './js/trackdechets.js',
+  './js/settings.js',
   './manifest.webmanifest',
 ];
 

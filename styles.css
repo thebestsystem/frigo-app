@@ -58,3 +58,10 @@ dd:last-child { margin-bottom: 0; }
 .success-mark { color: #0f6b47; font-size: 48px; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background-color .12s; } }
 @media print { .actions, #queue, header { display: none; } }
+nav { margin-bottom: 18px; }
+nav [aria-pressed="true"] { border-color: #0f6b47; background: #d9f0e5; }
+select { font: inherit; width: 100%; min-height: 52px; background: white; border: 2px solid #707881; border-radius: 5px; padding: 10px; }
+.check { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.check input { width: 24px; min-height: 24px; height: 24px; flex-shrink: 0; }
+button:disabled { opacity: .6; cursor: default; }
+#send-status { overflow-wrap: anywhere; }

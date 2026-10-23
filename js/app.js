@@ -1,5 +1,14 @@
-import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries, toBsffPayload, toPrintableHtml } from './model.js';
+import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries } from './model.js';
 
+import { buildCerfaHtml, printDoc } from './cerfa.js';
+import { aggregateBilan, buildBilanHtml } from './bilan.js';
+import { sendDraftBsff, ENDPOINTS } from './trackdechets.js';
+import { loadSettings, saveSettings } from './settings.js';
+
+let settings = loadSettings();
+let currentId = null;
+const sending = new Set();
+const sendMessages = new Map();
 const $ = selector => document.querySelector(selector);
 const form = $('#intervention-form');
 const canvas = $('#signature');
@@ -69,28 +78,77 @@ function download(text, filename, type) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+function printSafely(html) {
+  try { Promise.resolve(printDoc(html)).catch(error => showError(error.message)); }
+  catch (error) { showError(error.message); }
+}
+
+function printBilan(item) {
+  printSafely(buildBilanHtml(aggregateBilan(queue, Number(item.date.slice(0, 4))), settings));
+}
+
+async function createDraft(item) {
+  if (sending.has(item.id) || item.trackdechetsId) return;
+  sending.add(item.id);
+  renderQueue();
+  $('#create-draft').disabled = sending.has(currentId);
+  $('#send-status').textContent = 'Traitement en cours…';
+  const result = await sendDraftBsff(item, settings, {
+    token: settings.token, endpoint: ENDPOINTS[settings.environment], dryRun: settings.dryRun,
+    fetchImpl: (...args) => window.fetch(...args)
+  });
+  let message;
+  if (result.dryRun) {
+    message = 'dry-run : simulation réussie, aucun envoi réseau. Statut en attente conservé.';
+  } else {
+    const updated = { ...item, status: result.ok ? 'draft-created' : 'error',
+      lastError: result.ok ? null : result.error, sentAt: result.ok ? new Date().toISOString() : item.sentAt ?? null,
+      trackdechetsId: result.ok ? result.id : item.trackdechetsId ?? null };
+    const next = queue.map(entry => entry.id === item.id ? updated : entry);
+    try { saveQueue(next); queue = next; }
+    catch (error) {
+      // Conserve aussi l’identifiant en mémoire pour éviter un second envoi.
+      queue = next;
+      showError(`Résultat TrackDéchets reçu mais stockage impossible : ${error.message}`);
+    }
+    message = result.ok ? `Brouillon créé : ${result.id}` : result.error;
+  }
+  $('#send-status').textContent = message;
+  sendMessages.set(item.id, message);
+  sending.delete(item.id);
+  renderQueue();
+  $('#create-draft').disabled = Boolean(queue.find(entry => entry.id === currentId)?.trackdechetsId) || sending.has(currentId);
+}
+
 function renderQueue() {
-  $('#queue-title').textContent = `${queue.length} intervention${queue.length > 1 ? 's' : ''} en attente`;
+  const count = status => queue.filter(item => item.status === status).length;
+  $('#queue-title').textContent = `${count('pending')} en attente · ${count('draft-created')} brouillons créés · ${count('error')} erreurs`;
   $('#queue-list').replaceChildren();
   for (const item of queue) {
     const article = document.createElement('article');
     const title = document.createElement('p');
-    title.textContent = `${item.marque} ${item.modele} · ${item.date}`;
+    title.textContent = `${item.marque} ${item.modele} · ${item.date} · ${item.status}${item.lastError ? ` · ${item.lastError}` : ''}${item.trackdechetsId ? ` · ${item.trackdechetsId}` : ''}`;
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    for (const [label, suffix, content, type] of [
-      ['Exporter JSON BSFF', 'bsff.json', () => JSON.stringify(toBsffPayload(item), null, 2), 'application/json'],
-      ['Document imprimable', 'html', () => toPrintableHtml(item), 'text/html'],
-      ['Sauvegarder la fiche', 'json', () => JSON.stringify(item, null, 2), 'application/json']
+    for (const [label, action] of [
+      ['Exporter en PDF', () => printSafely(buildCerfaHtml(item, settings))],
+      ['Bilan F-Gas', () => printBilan(item)],
+      ['Créer le brouillon TrackDéchets', () => createDraft(item)],
+      ['Sauvegarder la fiche', () => download(JSON.stringify(item, null, 2), `frigo-${item.id}.json`, 'application/json')]
     ]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
+      button.disabled = label === 'Créer le brouillon TrackDéchets' && (sending.has(item.id) || Boolean(item.trackdechetsId));
       button.setAttribute('aria-label', `${label} : ${item.marque} ${item.modele}, ${item.date}`);
-      button.addEventListener('click', () => download(content(), `frigo-${item.id}.${suffix}`, type));
+      button.addEventListener('click', action);
       actions.append(button);
     }
-    article.append(title, actions);
+    const feedback = document.createElement('p');
+    feedback.setAttribute('role', 'status');
+    feedback.textContent = sendMessages.get(item.id) || '';
+    feedback.hidden = !feedback.textContent;
+    article.append(title, actions, feedback);
     $('#queue-list').append(article);
   }
 }
@@ -176,6 +234,9 @@ form.addEventListener('submit', event => {
     const nextQueue = [...queue, intervention];
     saveQueue(nextQueue);
     queue = nextQueue;
+    currentId = intervention.id;
+    $('#send-status').textContent = 'Aucun envoi à TrackDéchets n’a été effectué.';
+    $('#create-draft').disabled = false;
     renderQueue();
     form.hidden = true;
     $('#queue').hidden = false;
@@ -201,7 +262,7 @@ $('#new-intervention').addEventListener('click', () => {
 function updateOnline() { $('#offline').hidden = navigator.onLine !== false; }
 window.addEventListener('online', updateOnline);
 window.addEventListener('offline', updateOnline);
-window.addEventListener('storage', () => { queue = loadQueue(); renderQueue(); });
+window.addEventListener('storage', () => { queue = loadQueue(); settings = loadSettings(); fillSettings(); renderQueue(); });
 setDate();
 clearSignature();
 updateOnline();
@@ -219,3 +280,40 @@ if ('serviceWorker' in navigator) {
 } else {
   $('#cache-status').textContent = 'Ce navigateur ne permet pas le mode hors ligne.';
 }
+
+function fillSettings() {
+  const fields = $('#settings-form').elements;
+  for (const [key, value] of Object.entries(settings)) {
+    if (key === 'dryRun') fields.namedItem(key).checked = value;
+    else fields.namedItem(key).value = value;
+  }
+}
+function showSettings(visible) {
+  $('#settings-panel').hidden = !visible;
+  $('#intervention-panel').hidden = visible;
+  $('#tab-settings').setAttribute('aria-pressed', String(visible));
+  $('#tab-intervention').setAttribute('aria-pressed', String(!visible));
+}
+$('#tab-settings').addEventListener('click', () => showSettings(true));
+$('#tab-intervention').addEventListener('click', () => showSettings(false));
+$('#show-token').addEventListener('change', event => { $('#td-token').type = event.target.checked ? 'text' : 'password'; });
+$('#settings-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const next = Object.fromEntries(new FormData(event.currentTarget));
+  next.dryRun = event.currentTarget.elements.namedItem('dryRun').checked;
+  try { saveSettings(next); settings = next; $('#settings-status').textContent = 'Réglages enregistrés sur cet appareil.'; }
+  catch (error) { $('#settings-status').textContent = `Enregistrement impossible : ${error.message}`; }
+});
+$('#export-pdf').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) printSafely(buildCerfaHtml(item, settings));
+});
+$('#export-bilan').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) printBilan(item);
+});
+$('#create-draft').addEventListener('click', () => {
+  const item = queue.find(entry => entry.id === currentId);
+  if (item) createDraft(item);
+});
+fillSettings();

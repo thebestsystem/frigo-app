@@ -1,65 +1,62 @@
 # Frigo
 
-Assistant local en trois étapes pour une fiche d’intervention de fluides frigorigènes. HTML, CSS et modules JavaScript natifs, sans dépendance, sans compilation, sans police distante.
+Assistant local en trois étapes pour les interventions sur fluides frigorigènes. HTML, CSS et modules JavaScript natifs, sans backend, dépendance npm ni compilation.
 
-## Lancer
-
-Depuis la racine du dépôt :
+## Lancer et tester
 
 ```sh
 python3 -m http.server 8080
 ```
 
-Ouvrir **http://localhost:8080/**. Attendre « Disponible hors connexion sur cet appareil » avant de couper le réseau. Un premier chargement connecté est nécessaire. Le service worker exige localhost ou HTTPS : pour un téléphone accédant à une autre machine, un simple serveur HTTP sur le réseau local ne suffit pas.
+Ouvrir http://localhost:8080/ et attendre « Disponible hors connexion sur cet appareil ». Le premier chargement nécessite une connexion ; le service worker exige localhost ou HTTPS.
 
-Aucune installation npm n’est nécessaire. Node.js 22 ou ultérieur permet de lancer les tests :
+Avec Node.js 22 ou ultérieur :
 
 ```sh
 node --test
 ```
 
-Les six tests couvrent les validations des étapes 1 et 2, le calcul arrondi, le stockage corrompu et la persistance, la stabilité du JSON BSFF et le document HTML signé (avec échappement des textes).
+Les 14 tests comprennent les six tests d’origine inchangés et huit tests couvrant le document imprimable, le bilan annuel, les variables GraphQL sans `undefined`, la simulation sans réseau, l’absence de jeton, les réponses GraphQL et HTTP et la migration des anciennes fiches. Le transport des tests est injecté et n’appelle aucun service externe.
 
-## Utiliser et exporter
+## Utiliser
 
-1. Renseigner marque, modèle, fluide et charge totale strictement positive. Le numéro de série est facultatif ; les boutons − et + modifient la charge de 0,1 kg.
-2. Choisir l’opération, vérifier la date locale préremplie et renseigner les poids. La charge récupérée correspond à avant − après, avec deux décimales. La longueur de circuit est facultative.
-3. Indiquer le nom, tracer la signature au doigt, au stylet ou à la souris, vérifier le récapitulatif, puis choisir « Signer et enregistrer ».
-4. Après confirmation, commencer une nouvelle intervention. Les fiches en attente figurent en bas du premier écran et restent présentes après rechargement.
+1. Dans **Réglages**, enregistrer SIRET, nom, contact, téléphone, email et adresse de l’entreprise. Le jeton TrackDéchets est masqué et peut être affiché. Choisir Bac à sable ou Production ; **Mode simulation** est coché par défaut.
+2. Renseigner le détenteur de l’équipement et son adresse, puis marque, modèle, fluide et charge totale. Le numéro de série est facultatif.
+3. Choisir le type d’intervention, la date, les poids avant/après et éventuellement la longueur du circuit. La charge récupérée est la différence des poids arrondie à deux décimales.
+4. Indiquer le signataire, tracer sa signature et enregistrer. La confirmation et la liste locale proposent les actions suivantes.
 
-Chaque fiche propose trois téléchargements utilisables hors ligne :
+- **Exporter en PDF** ouvre un document HTML autonome puis la boîte d’impression du navigateur : choisir l’enregistrement en PDF. Format A4 portrait, marges de 12 mm, mesures en tableau noir et blanc, signature PNG. Il porte la mention « Document de travail généré par Frigo — ne remplace pas le Cerfa officiel signé. »
+- **Bilan F-Gas** imprime les interventions de l’année de la fiche choisie, avec date, client, fluide, kg récupérés et totaux. Les fiches de statut `draft` et les fluides inconnus sont exclus. Les statuts d’envoi n’excluent pas les interventions terminées.
+- **Créer le brouillon TrackDéchets** simule par défaut et affiche `dry-run` sans réseau ni création de brouillon réel. Le statut local est conservé. Pour envoyer, enregistrer un jeton et décocher la simulation, puis cliquer explicitement sur ce bouton.
+- **Sauvegarder la fiche** télécharge son JSON complet, signature et métadonnées comprises.
 
-- **Exporter JSON BSFF** : sous-ensemble de `BsffInput` contenant le type `COLLECTE_PETITES_QUANTITES`, la description du fluide et le poids récupéré en kilogrammes. Les clés et les valeurs sont déterministes et sans `undefined`.
-- **Document imprimable** : fichier HTML autonome contenant tous les champs, la référence, la date d’enregistrement et la signature PNG. Ouvrir le fichier téléchargé dans un navigateur puis utiliser sa commande Imprimer, éventuellement vers PDF. Il porte la mention « Document de travail — ne remplace pas le Cerfa officiel signé ».
-- **Sauvegarder la fiche** : JSON complet comprenant identifiant UUID v4, horodatage ISO, données saisies, signature PNG et statut `pending`.
+## TrackDéchets
 
-Le JSON BSFF suit les champs documentés dans la [référence officielle BsffInput de TrackDéchets](https://developers.trackdechets.beta.gouv.fr/reference/api-reference/bsff/inputObjects#bsffinput). Il reste **incomplet pour une transmission** : le formulaire ne collecte pas les acteurs (SIRET, coordonnées de l’émetteur, du transporteur, du destinataire), la classification du déchet, les références des bouteilles ou les identifiants TrackDéchets des fiches d’intervention. Ces informations ne sont pas inventées. Le JSON complet de la fiche conserve les informations locales pour une future intégration.
+`js/trackdechets.js` construit uniquement la mutation GraphQL `createDraftBsff(input: BsffInput!) { id }`. Le corps envoyé est `{ query, variables }`, avec `input.type: "BSFF"` et les coordonnées connues de l’émetteur. Les champs inconnus sont omis. Aucun POST REST métier ni création de BSFF complet n’est implémenté. Le bureau complète le brouillon dans TrackDéchets.
 
-## Stockage et fonctionnement hors ligne
+Environnements :
 
-Les fiches sont enregistrées dans `localStorage`, sous la clé `frigo.interventions.v1`. Un JSON illisible est toléré et donne une file vide. Les erreurs d’écriture sont signalées sans confirmer un enregistrement ni effacer le formulaire. La signature reste disponible pour une nouvelle tentative tant que la page reste ouverte. Les saisies non enregistrées ne survivent pas au rechargement.
+- Bac à sable : `https://api.sandbox.trackdechets.beta.gouv.fr`
+- Production : `https://api.trackdechets.beta.gouv.fr`
 
-Le stockage appartient au navigateur et à l’origine (protocole, hôte et port). Le vider ou utiliser un autre appareil ne permet pas de retrouver les fiches. Exporter régulièrement les fiches complètes pour les sauvegarder. Les données et signatures ne sont pas chiffrées par l’application.
+Tout appel métier passe par `sendDraftBsff` avec `fetchImpl` explicitement injecté. L’import des modules, le retour du réseau et la lecture de la file ne déclenchent aucun envoi. Sans jeton en mode réel, une erreur claire apparaît et le statut devient `error`, sans réseau. Les erreurs HTTP, GraphQL et réseau sont remontées. Une réussite persiste `draft-created`, `trackdechetsId`, `sentAt` et efface `lastError`. Le bouton est ensuite désactivé pour cette fiche.
 
-Le cache contient uniquement l’app shell. `sw.js`, à la racine, charge `js/sw.js` : ce lanceur est nécessaire pour contrôler toute l’application sans en-tête HTTP spécial avec `python3 -m http.server`. Le service worker ne traite que les ressources statiques de cette application. Pour déployer une nouvelle version, incrémenter `CACHE_NAME` dans `js/sw.js` ; l’installation prépare le nouveau cache complet, attend la fermeture des anciens onglets, puis supprime les anciens caches Frigo lors de l’activation. Aucun rechargement forcé ne coupe une saisie en cours.
+L’ancien utilitaire `toBsffPayload` reste disponible pour compatibilité avec les six tests d’origine ; il n’est utilisé par aucun envoi.
 
-## Ce qui n’est pas fait
+## Stockage et hors ligne
 
-- Aucun backend, compte, jeton, appel API TrackDéchets, envoi automatique ou synchronisation entre appareils. Le retour du réseau masque le bandeau hors connexion mais laisse les fiches en attente.
-- Aucun Cerfa officiel rempli ou PDF réglementaire, aucune signature électronique certifiée, aucune validation juridique du document de travail.
-- Aucune importation des sauvegardes et aucune suppression des fiches dans l’interface.
-- Aucun enregistrement automatique des brouillons.
+Les interventions sont conservées sous `frigo.interventions.v1`, les réglages sous `frigo.settings.v1`, dans `localStorage`. Une ancienne fiche sans `status` est lue comme `pending`. Les fiches en erreur et les brouillons créés restent disponibles après rechargement. Le premier écran affiche les trois compteurs.
 
-## Definition of Done — vérification
+Les données, signatures et le jeton sont stockés localement sans chiffrement. Le stockage dépend du navigateur et de l’origine ; exporter les fiches pour les sauvegarder. Les écritures impossibles sont signalées. Les saisies non enregistrées ne survivent pas au rechargement. L’importation et la suppression des fiches ne sont pas proposés.
 
-Vérifications effectuées avec Node.js 26.7.0 et Chromium 155 en mode headless :
+`sw.js` met en cache l’application et tous ses modules, y compris `cerfa.js`, `bilan.js`, `trackdechets.js` et `settings.js`. Le cache est `frigo-shell-v3`. L’installation prépare le cache, active le nouveau worker et supprime les anciens caches. Les ressources GET utilisent le cache et les navigations essaient le réseau avec repli sur le document local. Le service worker n’intercepte aucun POST.
 
-- [x] `node --test` : six tests, six réussites, zéro échec.
-- [x] Application servie par `python3 -m http.server 8080` ; premier chargement, installation du cache, rechargement avec réseau désactivé, puis parcours complet des trois étapes et signature avec de véritables événements pointeur. Vérification à 390 × 844, sans débordement horizontal.
-- [x] Enregistrement signé dans `frigo.interventions.v1`, puis rechargement hors ligne : fiche conservée et « 1 intervention en attente » visible sur le premier écran.
-- [x] Aucune erreur console ni exception JavaScript au chargement ou pendant ce parcours. Refus de stockage simulé : erreur affichée, saisie conservée, aucune confirmation trompeuse.
-- [x] Code inspecté : aucun marqueur de travail restant ni fonction vide. `design-ref/` et `design/` n’ont pas été modifiés.
+## Definition of Done vérifiée
 
-Les contrôles de saisie et boutons ont au moins 52 px de hauteur, les libellés principaux 18 px, les couleurs de texte sont contrastées et le focus est visible. Les boutons d’incrémentation portent un nom accessible.
+- `node --test` : 14 tests, 0 échec ; les six tests d’origine sont inchangés.
+- Chromium headless : parcours des trois étapes avec signature par événements pointeur, persistance des réglages et des fiches, contenu des deux exports et appel de `print()`.
+- Observation réseau Chromium : aucune requête lors de la simulation, ni lors de l’essai réel sans jeton ; message explicite et statut `error` persisté.
+- Vérification du cache des quatre nouveaux modules et rechargement hors ligne avec fiche et compteur conservés ; aucune exception JavaScript pendant le parcours.
+- Aucun marqueur de travail restant ni fonction vide dans le code ajouté ; aucune dépendance npm ; `design-ref/` préservé.
 
-Restent à vérifier sur matériel réel : installation PWA selon le navigateur, Safari/iOS et Firefox, signature tactile avec gants, lisibilité au soleil, audit complet au lecteur d’écran, impression physique et cycle de mise à jour entre deux versions déployées. Le fonctionnement hors ligne et la persistance ont été vérifiés dans Chromium, pas sur ces autres environnements.
+Non vérifiés : création sur les services TrackDéchets réels (aucun jeton utilisé), impression physique, Safari/iOS et Firefox, installation PWA sur appareil et mise à jour entre deux versions déployées. Les documents sont des documents de travail et ne constituent pas un formulaire officiel ou une signature électronique certifiée.
