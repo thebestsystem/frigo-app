@@ -317,3 +317,43 @@ $('#create-draft').addEventListener('click', () => {
   if (item) createDraft(item);
 });
 fillSettings();
+
+
+// --- Session TrackDéchets (jeton détenu par la passerelle, jamais ici) ---
+const TDC_API = 'https://trackdechets.up.railway.app';
+
+async function refreshTdcSession() {
+  const status = $('#tdc-status');
+  const connect = $('#tdc-connect');
+  const logout = $('#tdc-logout');
+  if (!status) return;
+  try {
+    const res = await fetch(`${TDC_API}/api/session`, { credentials: 'include' });
+    const data = await res.json().catch(() => ({}));
+    if (data.authenticated) {
+      status.textContent = `Connecté${data.email ? ' — ' + data.email : ''} (${data.env})`;
+      connect.hidden = true;
+      logout.hidden = false;
+    } else {
+      status.textContent = 'Non connecté. L’autorisation ouvre la page TrackDéchets.';
+      connect.hidden = false;
+      logout.hidden = true;
+    }
+  } catch {
+    status.textContent = 'Passerelle injoignable.';
+  }
+}
+
+$('#tdc-logout')?.addEventListener('click', async () => {
+  try { await fetch(`${TDC_API}/oauth2/trackdechets/logout`, { method: 'POST', credentials: 'include' }); } catch {}
+  refreshTdcSession();
+});
+
+if ($('#settings-panel')) {
+  const observer = new MutationObserver(() => { if (!$('#settings-panel').hidden) refreshTdcSession(); });
+  observer.observe($('#settings-panel'), { attributes: true, attributeFilter: ['hidden'] });
+  refreshTdcSession();
+  if (new URLSearchParams(location.search).get('trackdechets') === 'ok') {
+    setTimeout(refreshTdcSession, 300);
+  }
+}

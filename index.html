@@ -33,6 +33,12 @@
       <div class="field"><label for="td-environment">Environnement</label><select id="td-environment" name="environment"><option value="sandbox">Bac à sable</option><option value="production">Production</option></select></div>
       <label class="check"><input name="dryRun" type="checkbox" checked> Mode simulation</label>
       <button type="submit" class="primary">Enregistrer les réglages</button>
+      <fieldset>
+        <legend>Compte TrackDéchets</legend>
+        <p id="tdc-status" role="status">Vérification de la session…</p>
+        <a id="tdc-connect" class="cta" href="https://trackdechets.up.railway.app/oauth2/trackdechets/start">Autoriser TrackDéchets (sandbox)</a>
+        <button id="tdc-logout" type="button" hidden>Déconnecter</button>
+      </fieldset>
       <p id="settings-status" role="status"></p>
     </form>
   </section>
