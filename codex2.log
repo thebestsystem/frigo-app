@@ -1,0 +1,826 @@
+Reading additional input from stdin...
+OpenAI Codex v0.163.0
+--------
+workdir: /data/.hermes/home/frigo/app
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a1688f-cec0-71d3-acda-ad74eada3d08
+--------
+user
+Lis SPEC2.md à la racine et implémente-la intégralement en conservant l'existant (les 6 tests actuels doivent rester verts). Contraintes : zéro dépendance npm, JS natif, tests node --test, fetch injectable, aucun appel réseau implicite. Boucle jusqu'à ce que 'node --test' affiche 14 tests et 0 échec. Vérifie ensuite la Definition of Done. Réponse finale concise : fichiers créés/modifiés, sortie exacte de node --test, et ce que tu n'as pas pu vérifier.
+codex
+Je vais lire `SPEC2.md` et les consignes du dépôt, puis implémenter et tester jusqu’à obtenir 14 tests sans échec. Je vérifierai ensuite la Definition of Done.
+
+exec
+/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g 'SPEC2.md' -g 'package.json' -g '*test*' -g 'SKILL.md'" in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+/data/.hermes/home/frigo/app
+SPEC2.md
+package.json
+tests/model.test.js
+
+exec
+/bin/bash -lc 'cat /data/.hermes/home/.codex/plugins/cache/openai-curated-remote/cloud-environment/0.1.2/skills/runtime/SKILL.md' in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+---
+name: cloud-environment-runtime
+description: Read at the start of work in a managed cloud environment. Inspect network policy and configured credentials; build and run Docker containers with the session proxy and CA trust; use Tailscale VPN access, configure TCP forwarding, and diagnose access failures.
+---
+
+Read this skill at the start of work in a managed cloud environment, including
+resumed work. Before building or running Docker containers, read
+[Docker in Docker](references/docker.md) and follow its proxy and CA guidance.
+
+Use `cloud_environment.environment_status` at the start of work in a managed cloud
+environment and when diagnosing network or authentication failures. It takes no
+arguments. The runtime selects the instance and checks access as the task's actor.
+The result describes the thread's managed instance; it does not describe extra
+attached environments or the latest editable configuration draft.
+
+Before network work, read [Cloud environment networking](references/networking.md)
+and inspect the selected executor's `/etc/codex/network-policy.json`. If the
+supported policy snapshot reports `vpn_configured: true`, also read
+[Tailscale VPN access](references/vpn.md). The flag indicates configuration,
+not VPN health. Also read the VPN reference when explicitly diagnosing VPN access,
+even if the flag is missing or false. `environment_status` reports HTTP policy
+and credential readiness, not TCP grants or VPN health.
+
+Use the returned network policy, secret bindings, runtime variable names, and
+outbound identity aliases to plan commands. Do not print credential values, dump
+the process environment, or inspect secret files to discover their contents.
+A configured variable may hold a proxy placeholder; that alone does not mean its
+credential is missing. Use the configured SDK or CLI normally.
+
+Treat desired configuration and observed readiness separately. Require
+`observations_current: true` and the individual state `ready` before treating a
+secret, runtime variable, or outbound identity as ready. Network policy is applied
+only when its current state is `enforced`. Missing or any other states, including
+`skipped` and `unsupported`, do not establish readiness. Recheck after setup
+completes. Ready observations describe setup, not guaranteed authorization for
+every remote API call. Diagnose the actual command's error too.
+
+For CLI or SDK profile selection, read the worker's non-secret JSON manifest at
+`OIC_MANIFEST_PATH`, if present. Version 1 contains a `connections` list. Select
+the entry whose `alias` matches the identity needed for the task; `is_default`
+identifies the provider's default, not necessarily the intended identity. Use the
+selected entry's fields to set these environment variables for that command only:
+
+| `provider_kind` | Environment variable ← manifest field |
+| --- | --- |
+| `azure` | `IDENTITY_ENDPOINT` ← `identity_endpoint`; `AZURE_CONFIG_DIR` ← `config_dir` |
+| `aws` | `AWS_PROFILE` ← `alias`; `AWS_CONFIG_FILE` ← `config_file` |
+| `gcp` | `CLOUDSDK_CONFIG` ← `config_dir`; `CLOUDSDK_ACTIVE_CONFIG_NAME` ← `configuration_name`; `GOOGLE_APPLICATION_CREDENTIALS` ← `credentials_file` |
+
+Preserve the inherited runtime authentication headers and guard variables. Use
+credential file paths as selectors without reading or printing their contents.
+Do not invent aliases, replace injected credentials, or start interactive login
+merely because a token is not visible. Inspect the entry's `setup` outcome when
+diagnosing CLI failures; a warning does not establish successful CLI setup. If
+the manifest version, required entry, or selector fields are unavailable or
+unsupported, report the missing setup instead of silently using another identity.
+
+This plugin reads runtime context. Configuration changes require the environment
+configuration workflow and its user review. If the tool reports no attached
+managed environment, do not reuse an instance ID or readiness result from a prior
+turn.
+
+exec
+/bin/bash -lc 'ls -la; cat SPEC2.md; cat package.json; cat tests/model.test.js; for f in /AGENTS.md /data/AGENTS.md /data/.hermes/AGENTS.md /data/.hermes/home/AGENTS.md /data/.hermes/home/frigo/AGENTS.md /data/.hermes/home/frigo/app/AGENTS.md; do if [ -f "$f" ]; then cat "$f"; fi; done' in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+total 84
+drwxr-xr-x 6 root root 4096 Oct 23 11:40 .
+drwxr-xr-x 6 root root 4096 Oct 22 07:54 ..
+drwxr-xr-x 8 root root 4096 Oct 23 11:40 .git
+-rw-r--r-- 1 root root   20 Oct 21 19:25 .gitignore
+-rw-r--r-- 1 root root 6497 Oct 21 19:24 README.md
+-rw-r--r-- 1 root root 5035 Oct 21 19:20 SPEC.md
+-rw-r--r-- 1 root root 4795 Oct 23 11:40 SPEC2.md
+-rw-r--r-- 1 root root 5354 Oct 23 11:40 codex2.log
+drwxr-xr-x 2 root root 4096 Oct 21 19:20 design-ref
+-rw-r--r-- 1 root root 5989 Oct 21 19:21 index.html
+drwxr-xr-x 2 root root 4096 Oct 21 19:25 js
+-rw-r--r-- 1 root root 1093 Oct 21 19:22 manifest.webmanifest
+-rw-r--r-- 1 root root  101 Oct 21 19:21 package.json
+-rw-r--r-- 1 root root 4021 Oct 21 19:21 styles.css
+-rw-r--r-- 1 root root 1852 Oct 21 19:27 sw.js
+drwxr-xr-x 2 root root 4096 Oct 21 19:22 tests
+# SPEC v2 — Frigo : du formulaire au document et à l'envoi TrackDéchets
+
+Le socle existe (3 étapes, signature, file locale, hors ligne, 6 tests verts).
+Cette version ajoute ce qui transforme la démo en outil utilisable en production,
+**sans backend** et **sans nouvelle dépendance**.
+
+## 1. Document Cerfa 15497 (`js/cerfa.js`)
+- `buildCerfaHtml(intervention)` → chaîne HTML autonome, A4 portrait, styles inline,
+  reprenant la structure du Cerfa 15497*04 : cadre « Détenteur de l'équipement »,
+  « Opérateur », « Équipement » (marque, modèle, n° série, fluide, charge),
+  « Intervention » (type, date, poids avant/après, charge récupérée, longueur circuit),
+  bloc signature (image data URL + nom), mention en pied : **« Document de travail généré
+  par Frigo — ne remplace pas le Cerfa officiel signé. »**
+- `printToPdf()` côté UI : ouvre une fenêtre contenant le HTML et déclenche `print()`
+  (l'utilisateur choisit « Enregistrer en PDF »). Aucune bibliothèque PDF.
+- Contraintes d'impression : pas de bouton dans le document, marges 12 mm, texte ≥ 9 pt,
+  signature encadrée, tableau des mesures lisible en noir et blanc.
+
+## 2. Bilan F-Gas annuel (`js/bilan.js`)
+- `aggregateBilan(interventions, year)` → `{ year, count, byFluid: {R32: {n, kg}, R410A: {...}}, totalKg }`
+  en ne comptant que les interventions `status !== "draft"` de l'année demandée.
+- `buildBilanHtml(bilan, company)` → document imprimable listant les interventions
+  (date, client, fluide, charge récupérée) et les totaux par fluide.
+
+## 3. Envoi TrackDéchets (`js/trackdechets.js`)
+- `buildBsffPayload(intervention, company)` → objet JSON stable, sans `undefined` :
+  `{ type: "BSFF", emitter: {companySiret, name}, waste: {code: "14 06 01*", pop: true},
+     quantity: {value: chargeRecuperee, unit: "KG"}, takenOverAt: date, transporter: null,
+     destination: null, externalId: intervention.id }`.
+- `sendBsff(intervention, company, options)` avec `options = { token, endpoint, dryRun, fetchImpl }` :
+  - `dryRun` → ne fait aucun appel réseau, retourne `{ ok: true, dryRun: true, payload }` ;
+  - sans token → `{ ok: false, error: "token manquant" }` **sans** appel réseau ;
+  - en réel → `POST endpoint` avec `Authorization: Bearer <token>` et le payload ;
+    gère 200/201 (`ok: true`), 400/401/500 (`ok: false, error` avec le message serveur).
+- `fetchImpl` injectable : les tests ne font aucun réseau.
+
+## 4. Interface
+- Écran **Réglages** (nouvel onglet accessible depuis l'en-tête) : SIRET de l'entreprise,
+  nom, jeton TrackDéchets (champ mot de passe + case « afficher »), sélecteur
+  Environnement : Bac à sable | Production, case **Mode simulation (aucun envoi)** cochée par défaut.
+  Persistance dans `localStorage` clé `frigo.settings.v1`.
+- Sur l'écran de confirmation : boutons **« Exporter en PDF »**, **« Bilan F-Gas »**,
+  **« Envoyer à TrackDéchets »**. Chaque intervention porte désormais
+  `status: "pending" | "sent" | "error"` + `lastError` + `sentAt`, persistés.
+- Écran 1 : compteur « N interventions en attente · M envoyées ».
+
+## 5. Tests (s'ajoutent aux 6 existants, tous doivent passer)
+7. `buildCerfaHtml` contient marque, fluide, charge récupérée, nom du signataire et la mention obligatoire.
+8. `aggregateBilan` sur 3 interventions (2 en 2026, 1 en 2025) → compte 2, totaux par fluide corrects.
+9. `buildBsffPayload` : pas de `undefined`, `externalId` = id, quantité = charge récupérée.
+10. `sendBsff` en `dryRun` → `ok: true`, aucun appel au `fetchImpl` fourni.
+11. `sendBsff` sans token → `ok: false`, message explicite, aucun appel réseau.
+12. `sendBsff` avec `fetchImpl` renvoyant 201 → `ok: true` et payload transmis conforme.
+13. `sendBsff` avec `fetchImpl` renvoyant 400 → `ok: false`, message d'erreur remonté.
+14. Migration : une intervention de l'ancien format (sans `status`) est lue comme `status: "pending"`.
+
+## Definition of Done
+- `node --test` : **14 tests, 0 échec**.
+- Dans le navigateur : parcours complet d'une intervention, puis « Exporter en PDF » produit
+  un document imprimable contenant les données et la signature ; « Bilan F-Gas » liste
+  l'intervention ; « Envoyer à TrackDéchets » en mode simulation affiche `dry-run` sans réseau
+  (vérifiable onglet Réseau vide) ; en mode réel sans jeton → message d'erreur clair, statut `error`.
+- Hors ligne préservé (service worker, aucun appel réseau au chargement).
+- Aucun `TODO`, aucune fonction vide, pas de dépendance npm.
+
+## Interdits
+- Ne pas écrire le mot « Cerfa » sans la mention « document de travail » dans les exports.
+- Pas d'appel réseau implicite : tout envoi passe par `sendBsff` avec `fetchImpl`.
+- Ne pas casser les 6 tests existants ni `design-ref/`.
+{
+  "name": "frigo",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateStep1, validateStep2, chargeRecuperee, loadQueue, toBsffPayload, toPrintableHtml, createIntervention, saveQueue, QUEUE_KEY } from '../js/model.js';
+
+const data = {
+  marque: 'Daikin', modele: 'RXYQ12T', numeroSerie: 'SN-42', fluide: 'R32', chargeTotale: 4.5,
+  typeOperation: 'Maintenance', date: '2026-10-21', poidsAvant: 12.34, poidsApres: 4.10,
+  longueurCircuit: '', nomSignataire: 'Camille Martin'
+};
+const signature = 'data:image/png;base64,aGVsbG8=';
+
+test('validation étape 1 : charge strictement positive et fluide obligatoire', () => {
+  assert.deepEqual(validateStep1(data), {});
+  for (const chargeTotale of [0, -1, '', NaN, Infinity]) assert.ok(validateStep1({ ...data, chargeTotale }).chargeTotale);
+  for (const fluide of ['', undefined, 'R22']) assert.ok(validateStep1({ ...data, fluide }).fluide);
+  for (const field of ['marque', 'modele']) assert.ok(validateStep1({ ...data, [field]: '  ' })[field]);
+});
+
+test('validation étape 2 : refuse un poids après supérieur au poids avant', () => {
+  assert.deepEqual(validateStep2(data), {});
+  assert.ok(validateStep2({ ...data, poidsApres: 13 }).poidsApres);
+  assert.ok(validateStep2({ ...data, poidsApres: -1 }).poidsApres);
+  assert.ok(validateStep2({ ...data, poidsAvant: 0 }).poidsAvant);
+  assert.ok(validateStep2({ ...data, poidsApres: '' }).poidsApres);
+  assert.ok(validateStep2({ ...data, typeOperation: '' }).typeOperation);
+  assert.deepEqual(validateStep2({ ...data, poidsApres: 0 }), {});
+});
+
+test('chargeRecuperee : arrondit à deux décimales et interdit les poids invalides', () => {
+  assert.equal(chargeRecuperee(12.34, 4.10), 8.24);
+  assert.equal(chargeRecuperee(1, 0.995), 0.01);
+  assert.equal(chargeRecuperee(10, 10), 0);
+  assert.throws(() => chargeRecuperee(1, 2), RangeError);
+  assert.throws(() => chargeRecuperee('', 0), RangeError);
+});
+
+test('loadQueue : tolère le JSON corrompu et relit une intervention persistée', () => {
+  assert.deepEqual(loadQueue({ getItem: () => '{cassé' }), []);
+  for (const value of ['null', '{}', '42', '[null]']) assert.deepEqual(loadQueue({ getItem: () => value }), []);
+  assert.deepEqual(loadQueue({ getItem: () => { throw new Error('Stockage bloqué'); } }), []);
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  const intervention = createIntervention(data, signature);
+  assert.match(intervention.id, /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i);
+  assert.equal(new Date(intervention.createdAt).toISOString(), intervention.createdAt);
+  assert.equal(intervention.status, 'pending');
+  assert.equal(intervention.chargeRecuperee, 8.24);
+  saveQueue([intervention], storage);
+  assert.ok(values.has(QUEUE_KEY));
+  assert.deepEqual(loadQueue(storage), [intervention]);
+  assert.throws(() => createIntervention(data, ''), /signature/);
+});
+
+test('toBsffPayload : structure stable et aucune valeur undefined, même imbriquée', () => {
+  function check(value) {
+    assert.notEqual(value, undefined);
+    if (value && typeof value === 'object') Object.values(value).forEach(check);
+  }
+  const intervention = createIntervention(data, signature);
+  const payload = toBsffPayload(intervention);
+  check(payload);
+  check(toBsffPayload({}));
+  assert.deepEqual(payload, { type: 'COLLECTE_PETITES_QUANTITES', waste: { description: 'R32' }, weight: { value: 8.24, isEstimate: false } });
+  assert.deepEqual(payload, toBsffPayload(intervention));
+  assert.deepEqual(JSON.parse(JSON.stringify(payload)), payload);
+});
+
+test('toPrintableHtml : contient le signataire, la signature et la mention obligatoire', () => {
+  const html = toPrintableHtml(createIntervention(data, signature));
+  assert.ok(html.includes('Camille Martin'));
+  assert.ok(html.includes(`<img `));
+  assert.ok(html.includes(`src="${signature}"`));
+  assert.ok(html.includes('Document de travail — ne remplace pas le Cerfa officiel signé'));
+  assert.ok(html.includes('8.24 kg'));
+  const escaped = toPrintableHtml({ ...data, nomSignataire: '<script>alert(1)</script>', signatureDataUrl: '" onerror="alert(1)' });
+  assert.ok(!escaped.includes('<script>'));
+  assert.ok(!escaped.includes('onerror='));
+});
+
+codex
+J’applique aussi les consignes du skill `cloud-environment-runtime` pour l’environnement d’exécution. Le travail restera local, sans appel réseau.
+
+exec
+/bin/bash -lc 'rg --files js tests; cat js/model.js; cat js/app.js; cat index.html; cat sw.js; cat styles.css; cat README.md; git status --short' in /data/.hermes/home/frigo/app
+ succeeded in 0ms:
+tests/model.test.js
+js/app.js
+js/model.js
+export const QUEUE_KEY = 'frigo.interventions.v1';
+export const OPERATIONS = ['Mise en service', 'Maintenance', 'Démontage'];
+const present = value => typeof value === 'string' && value.trim().length > 0;
+const numeric = value => (typeof value === 'number' || present(value)) && Number.isFinite(Number(value));
+
+export function validateStep1(data) {
+  const errors = {};
+  if (!present(data.marque)) errors.marque = 'Indiquez la marque.';
+  if (!present(data.modele)) errors.modele = 'Indiquez le modèle.';
+  if (!['R32', 'R410A'].includes(data.fluide)) errors.fluide = 'Choisissez un fluide.';
+  if (!numeric(data.chargeTotale) || Number(data.chargeTotale) <= 0) errors.chargeTotale = 'La charge totale doit être supérieure à 0 kg.';
+  return errors;
+}
+
+export function validateStep2(data) {
+  const errors = {};
+  if (!OPERATIONS.includes(data.typeOperation)) errors.typeOperation = 'Choisissez une opération.';
+  if (!numeric(data.poidsAvant) || Number(data.poidsAvant) <= 0) errors.poidsAvant = 'Le poids avant doit être supérieur à 0 kg.';
+  if (!numeric(data.poidsApres) || Number(data.poidsApres) < 0) errors.poidsApres = 'Le poids après doit être positif ou nul.';
+  else if (numeric(data.poidsAvant) && Number(data.poidsApres) > Number(data.poidsAvant)) errors.poidsApres = 'Le poids après ne peut pas dépasser le poids avant.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date ?? '') || !Number.isFinite(Date.parse(data.date))) errors.date = 'Indiquez une date valide.';
+  if (data.longueurCircuit !== '' && data.longueurCircuit != null && (!numeric(data.longueurCircuit) || Number(data.longueurCircuit) < 0)) errors.longueurCircuit = 'La longueur doit être positive ou nulle.';
+  return errors;
+}
+
+export function chargeRecuperee(avant, apres) {
+  if (!numeric(avant) || !numeric(apres) || Number(avant) <= 0 || Number(apres) < 0 || Number(apres) > Number(avant)) throw new RangeError('Poids invalides.');
+  return Math.round((Number(avant) - Number(apres) + Number.EPSILON) * 100) / 100;
+}
+
+export function createIntervention(data, signatureDataUrl, { id = globalThis.crypto.randomUUID(), createdAt = new Date().toISOString() } = {}) {
+  const errors = { ...validateStep1(data), ...validateStep2(data) };
+  if (Object.keys(errors).length) throw new Error(Object.values(errors).join(' '));
+  if (!present(data.nomSignataire) || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureDataUrl)) throw new Error('Le nom et la signature sont obligatoires.');
+  return {
+    id, createdAt, marque: data.marque.trim(), modele: data.modele.trim(),
+    numeroSerie: String(data.numeroSerie ?? '').trim(), fluide: data.fluide,
+    chargeTotale: Number(data.chargeTotale), typeOperation: data.typeOperation, date: data.date,
+    poidsAvant: Number(data.poidsAvant), poidsApres: Number(data.poidsApres),
+    chargeRecuperee: chargeRecuperee(data.poidsAvant, data.poidsApres),
+    longueurCircuit: data.longueurCircuit === '' || data.longueurCircuit == null ? null : Number(data.longueurCircuit),
+    nomSignataire: data.nomSignataire.trim(), signatureDataUrl, status: 'pending'
+  };
+}
+
+export function loadQueue(storage) {
+  try {
+    const queue = JSON.parse((storage ?? globalThis.localStorage).getItem(QUEUE_KEY) ?? '[]');
+    return Array.isArray(queue) ? queue.filter(item => item && typeof item.id === 'string' && item.status === 'pending') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveQueue(queue, storage = globalThis.localStorage) {
+  storage.setItem(QUEUE_KEY, JSON.stringify(queue));
+}
+
+// Sous-ensemble de BsffInput ; les acteurs et contenants seront ajoutés à l'intégration.
+export function toBsffPayload(intervention) {
+  const value = Number(intervention.chargeRecuperee ?? 0);
+  return {
+    type: 'COLLECTE_PETITES_QUANTITES',
+    waste: { description: String(intervention.fluide ?? '') },
+    weight: { value: Number.isFinite(value) ? Math.max(0, value) : 0, isEstimate: false }
+  };
+}
+
+export function summaryEntries(data) {
+  let recovered = '—';
+  try { recovered = `${chargeRecuperee(data.poidsAvant, data.poidsApres).toFixed(2)} kg`; } catch { /* Saisie encore incomplète. */ }
+  return [
+    ['Marque', data.marque], ['Modèle', data.modele], ['Numéro de série', data.numeroSerie || 'Non renseigné'],
+    ['Fluide', data.fluide], ['Charge totale', `${data.chargeTotale} kg`], ['Opération', data.typeOperation],
+    ['Date', data.date], ['Poids avant', `${data.poidsAvant} kg`], ['Poids après', `${data.poidsApres} kg`],
+    ['Charge récupérée', recovered], ['Longueur de circuit', data.longueurCircuit == null || data.longueurCircuit === '' ? 'Non renseignée' : `${data.longueurCircuit} m`],
+    ['Signataire', data.nomSignataire || 'À renseigner']
+  ];
+}
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+export function toPrintableHtml(intervention) {
+  const signature = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(intervention.signatureDataUrl ?? '') ? intervention.signatureDataUrl : '';
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Frigo — Document de travail</title><body style="font:18px/1.5 system-ui,sans-serif;color:#0b1c30;background:white;max-width:800px;margin:32px auto;padding:16px"><h1>Fiche d’intervention — fluides frigorigènes</h1><p>Document de travail — ne remplace pas le Cerfa officiel signé</p><p>Référence : ${escapeHtml(intervention.id)}<br>Enregistrée : ${escapeHtml(intervention.createdAt)}</p><dl>${summaryEntries(intervention).map(([key, value]) => `<dt style="font-weight:700">${escapeHtml(key)}</dt><dd style="margin:0 0 12px">${escapeHtml(value)}</dd>`).join('')}</dl><h2>Signature</h2><img style="width:100%;max-width:500px;border:1px solid #707881" alt="Signature de ${escapeHtml(intervention.nomSignataire)}" src="${signature}"></body></html>`;
+}
+import { loadQueue, saveQueue, validateStep1, validateStep2, chargeRecuperee, createIntervention, summaryEntries, toBsffPayload, toPrintableHtml } from './model.js';
+
+const $ = selector => document.querySelector(selector);
+const form = $('#intervention-form');
+const canvas = $('#signature');
+const context = canvas.getContext('2d');
+let step = 1;
+let queue = loadQueue();
+let signed = false;
+let activePointer = null;
+let lastPoint = null;
+let saving = false;
+
+function readData() {
+  return Object.fromEntries(new FormData(form));
+}
+
+function setDate() {
+  const now = new Date();
+  $('#date').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function showError(message, fields = {}) {
+  $('#error').textContent = message;
+  $('#error').hidden = !message;
+  form.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
+  for (const name of Object.keys(fields)) {
+    form.querySelectorAll(`[name="${name}"]`).forEach(input => input.setAttribute('aria-invalid', 'true'));
+  }
+  if (message) $('#error').focus();
+}
+
+function renderSummary() {
+  const summary = $('#summary');
+  summary.replaceChildren();
+  for (const [label, value] of summaryEntries(readData())) {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    summary.append(dt, dd);
+  }
+}
+
+function navigate(next, focus = true) {
+  step = next;
+  form.hidden = false;
+  $('#confirmation').hidden = true;
+  document.querySelectorAll('[data-step]').forEach(section => { section.hidden = Number(section.dataset.step) !== step; });
+  $('#queue').hidden = step !== 1;
+  $('#title').textContent = ['1. Équipement', '2. Intervention', '3. Signature'][step - 1];
+  $('#step-label').textContent = `Étape ${step} sur 3`;
+  $('#progress').hidden = false;
+  $('#progress').setAttribute('aria-valuenow', String(step));
+  $('#progress').querySelectorAll('i').forEach((bar, index) => bar.classList.toggle('active', index < step));
+  showError('');
+  if (step === 3) renderSummary();
+  if (focus) { $('#title').focus(); window.scrollTo(0, 0); }
+}
+
+function download(text, filename, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function renderQueue() {
+  $('#queue-title').textContent = `${queue.length} intervention${queue.length > 1 ? 's' : ''} en attente`;
+  $('#queue-list').replaceChildren();
+  for (const item of queue) {
+    const article = document.createElement('article');
+    const title = document.createElement('p');
+    title.textContent = `${item.marque} ${item.modele} · ${item.date}`;
+    const actions = document.createElement('div');
+    actions.className = 'export-actions';
+    for (const [label, suffix, content, type] of [
+      ['Exporter JSON BSFF', 'bsff.json', () => JSON.stringify(toBsffPayload(item), null, 2), 'application/json'],
+      ['Document imprimable', 'html', () => toPrintableHtml(item), 'text/html'],
+      ['Sauvegarder la fiche', 'json', () => JSON.stringify(item, null, 2), 'application/json']
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.setAttribute('aria-label', `${label} : ${item.marque} ${item.modele}, ${item.date}`);
+      button.addEventListener('click', () => download(content(), `frigo-${item.id}.${suffix}`, type));
+      actions.append(button);
+    }
+    article.append(title, actions);
+    $('#queue-list').append(article);
+  }
+}
+
+function updateRecovered() {
+  try { $('#chargeRecuperee').value = chargeRecuperee($('#poidsAvant').value, $('#poidsApres').value).toFixed(2); }
+  catch { $('#chargeRecuperee').value = '—'; }
+}
+
+for (const [id, delta] of [['minus', -0.1], ['plus', 0.1]]) {
+  $(`#${id}`).addEventListener('click', () => {
+    const input = $('#chargeTotale');
+    input.value = (Math.max(0, Math.round(((Number(input.value) || 0) + delta) * 10)) / 10).toFixed(1);
+  });
+}
+$('#poidsAvant').addEventListener('input', updateRecovered);
+$('#poidsApres').addEventListener('input', updateRecovered);
+$('#nomSignataire').addEventListener('input', renderSummary);
+document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => navigate(step - 1)));
+
+function clearSignature() {
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  signed = false;
+  activePointer = null;
+  lastPoint = null;
+}
+
+function point(event) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height };
+}
+
+canvas.addEventListener('pointerdown', event => {
+  if (activePointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  event.preventDefault();
+  activePointer = event.pointerId;
+  canvas.setPointerCapture(event.pointerId);
+  lastPoint = point(event);
+  context.strokeStyle = '#0b1c30';
+  context.fillStyle = '#0b1c30';
+  context.lineWidth = 4;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.beginPath();
+  context.arc(lastPoint.x, lastPoint.y, 2, 0, Math.PI * 2);
+  context.fill();
+  signed = true;
+});
+canvas.addEventListener('pointermove', event => {
+  if (event.pointerId !== activePointer) return;
+  event.preventDefault();
+  const next = point(event);
+  const middle = { x: (lastPoint.x + next.x) / 2, y: (lastPoint.y + next.y) / 2 };
+  context.beginPath();
+  context.moveTo(lastPoint.x, lastPoint.y);
+  context.quadraticCurveTo(lastPoint.x, lastPoint.y, middle.x, middle.y);
+  context.lineTo(next.x, next.y);
+  context.stroke();
+  lastPoint = next;
+});
+for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(eventName, event => {
+    if (event.pointerId === activePointer) { activePointer = null; lastPoint = null; }
+  });
+}
+$('#clear-signature').addEventListener('click', clearSignature);
+
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  if (saving) return;
+  const data = readData();
+  if (step < 3) {
+    const errors = step === 1 ? validateStep1(data) : validateStep2(data);
+    if (Object.keys(errors).length) return showError(Object.values(errors).join(' '), errors);
+    navigate(step + 1);
+    return;
+  }
+  if (!data.nomSignataire.trim() || !signed) return showError('Renseignez le nom du signataire et tracez sa signature.');
+  saving = true;
+  try {
+    const intervention = createIntervention(data, canvas.toDataURL('image/png'));
+    const nextQueue = [...queue, intervention];
+    saveQueue(nextQueue);
+    queue = nextQueue;
+    renderQueue();
+    form.hidden = true;
+    $('#queue').hidden = false;
+    $('#confirmation').hidden = false;
+    $('#title').textContent = 'Enregistrement terminé';
+    $('#step-label').textContent = 'Étape 3 sur 3';
+    showError('');
+    $('#title').focus();
+    window.scrollTo(0, 0);
+  } catch (error) {
+    showError(`Enregistrement impossible : ${error.message} Votre saisie et votre signature sont conservées à l’écran. Vérifiez l’espace de stockage et réessayez.`);
+  } finally { saving = false; }
+});
+
+$('#new-intervention').addEventListener('click', () => {
+  form.reset();
+  setDate();
+  updateRecovered();
+  clearSignature();
+  navigate(1);
+});
+
+function updateOnline() { $('#offline').hidden = navigator.onLine !== false; }
+window.addEventListener('online', updateOnline);
+window.addEventListener('offline', updateOnline);
+window.addEventListener('storage', () => { queue = loadQueue(); renderQueue(); });
+setDate();
+clearSignature();
+updateOnline();
+renderQueue();
+navigate(1, false);
+
+if ('serviceWorker' in navigator) {
+  // Le script vit dans js/ ; le lanceur de racine lui donne la portée de l'app.
+  navigator.serviceWorker.register('./sw.js').then(async () => {
+    await navigator.serviceWorker.ready;
+    $('#cache-status').textContent = 'Disponible hors connexion sur cet appareil';
+  }).catch(() => {
+    $('#cache-status').textContent = 'Mode hors ligne indisponible. Ouvrez l’app sur localhost ou en HTTPS puis rechargez.';
+  });
+} else {
+  $('#cache-status').textContent = 'Ce navigateur ne permet pas le mode hors ligne.';
+}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f6b47">
+  <title>Frigo · Fiche d’intervention</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f6b47'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='44' fill='white'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="eyebrow"><strong>FRIGO</strong><span>Assistant Cerfa 15497</span></div>
+    <p id="offline" class="notice" role="status" hidden>Hors connexion</p>
+    <div class="heading"><h1 id="title" tabindex="-1">1. Équipement</h1><span id="step-label">Étape 1 sur 3</span></div>
+    <div id="progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><i></i><i></i><i></i></div>
+    <p id="cache-status" class="hint" role="status">Préparation du mode hors ligne…</p>
+  </header>
+  <noscript>Activez JavaScript pour utiliser le formulaire et le stockage local.</noscript>
+  <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
+  <form id="intervention-form" novalidate>
+    <section data-step="1" aria-labelledby="title">
+      <div class="field"><label for="marque">1. Marque</label><input id="marque" name="marque" placeholder="Ex. : Daikin, Carrier…" required></div>
+      <div class="field"><label for="modele">2. Modèle</label><input id="modele" name="modele" placeholder="Ex. : RXYQ12T" required></div>
+      <div class="field"><label for="numeroSerie">3. Numéro de série <small>(optionnel)</small></label><input id="numeroSerie" name="numeroSerie" placeholder="Ex. : SN-2026-9841"></div>
+      <fieldset><legend>4. Fluide frigorigène</legend><div class="choices"><label><input type="radio" name="fluide" value="R32" required><span>R32</span></label><label><input type="radio" name="fluide" value="R410A"><span>R410A</span></label></div></fieldset>
+      <div class="field"><label for="chargeTotale">5. Charge totale (kg)</label><div class="stepper"><button type="button" id="minus" aria-label="Diminuer la charge de 0,1 kg">−</button><input id="chargeTotale" name="chargeTotale" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="0,0" required><button type="button" id="plus" aria-label="Augmenter la charge de 0,1 kg">+</button></div></div>
+      <div class="actions"><button class="primary" type="submit">Suivant <span aria-hidden="true">→</span></button></div>
+    </section>
+    <section data-step="2" aria-labelledby="title" hidden>
+      <fieldset><legend>Type d’opération</legend><div class="choices vertical"><label><input type="radio" name="typeOperation" value="Mise en service" required><span>Mise en service</span></label><label><input type="radio" name="typeOperation" value="Maintenance"><span>Maintenance</span></label><label><input type="radio" name="typeOperation" value="Démontage"><span>Démontage</span></label></div></fieldset>
+      <div class="field"><label for="date">Date</label><input id="date" name="date" type="date" required></div>
+      <div class="field"><label for="poidsAvant">Poids bouteille avant (kg)</label><input id="poidsAvant" name="poidsAvant" type="number" inputmode="decimal" min="0.01" step="0.01" required></div>
+      <div class="field"><label for="poidsApres">Poids bouteille après (kg)</label><input id="poidsApres" name="poidsApres" type="number" inputmode="decimal" min="0" step="0.01" required></div>
+      <div class="field"><label for="chargeRecuperee">Charge récupérée (kg)</label><input id="chargeRecuperee" readonly value="—" aria-live="polite"><small>Poids avant − poids après</small></div>
+      <div class="field"><label for="longueurCircuit">Longueur de circuit (m, optionnel)</label><input id="longueurCircuit" name="longueurCircuit" type="number" inputmode="decimal" min="0" step="0.1"></div>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Suivant →</button></div>
+    </section>
+    <section data-step="3" aria-labelledby="title" hidden>
+      <div class="field"><label for="nomSignataire">Nom du signataire</label><input id="nomSignataire" name="nomSignataire" autocomplete="name" required></div>
+      <div class="field"><label id="signature-label" for="signature">Signature au doigt ou à la souris</label><canvas id="signature" width="700" height="360" tabindex="0" aria-labelledby="signature-label" aria-describedby="signature-help">La signature nécessite un navigateur compatible canvas.</canvas><small id="signature-help">Tracez votre signature dans le cadre.</small><button id="clear-signature" type="button">Effacer</button></div>
+      <h2>Récapitulatif</h2><dl id="summary"></dl>
+      <p class="hint">Document de travail — ne remplace pas le Cerfa officiel signé</p>
+      <div class="actions"><button type="button" data-back>Retour</button><button class="primary" type="submit">Signer et enregistrer</button></div>
+    </section>
+  </form>
+  <section id="confirmation" hidden aria-labelledby="confirmation-title"><div class="success-mark" aria-hidden="true">✓</div><h2 id="confirmation-title">Intervention enregistrée</h2><p>Votre fiche signée est conservée sur cet appareil et reste disponible hors connexion.</p><p>Aucun envoi à TrackDéchets n’a été effectué.</p><button class="primary" id="new-intervention" type="button">Nouvelle intervention</button></section>
+  <aside id="queue" aria-labelledby="queue-title"><h2 id="queue-title">0 intervention en attente</h2><p class="hint">Stockage sur cet appareil · Envoi TrackDéchets non connecté</p><div id="queue-list"></div></aside>
+</div>
+</body>
+</html>
+// Service worker : app shell en cache, mise à jour propre.
+// Placé à la racine pour contrôler index.html et tout le périmètre /frigo-app/.
+const CACHE = 'frigo-shell-v2';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css',
+  './js/app.js',
+  './js/model.js',
+  './manifest.webmanifest',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ASSETS);
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  // Navigation : réseau d'abord, cache en secours (fonctionne hors ligne).
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request);
+        const cache = await caches.open(CACHE);
+        cache.put('./index.html', fresh.clone());
+        return fresh;
+      } catch {
+        const cache = await caches.open(CACHE);
+        return (await cache.match('./index.html')) || (await cache.match('./')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Ressources : cache d'abord, réseau ensuite.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const hit = await cache.match(request);
+    if (hit) return hit;
+    try {
+      const fresh = await fetch(request);
+      if (fresh && fresh.status === 200 && fresh.type === 'basic') {
+        cache.put(request, fresh.clone());
+      }
+      return fresh;
+    } catch {
+      return Response.error();
+    }
+  })());
+});
+:root { font-family: system-ui, sans-serif; color: #0b1c30; background: #f8f9ff; font-size: 18px; line-height: 1.4; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+.shell { max-width: 520px; margin: auto; padding: 18px 16px max(24px, env(safe-area-inset-bottom)); }
+.eyebrow, .heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.eyebrow { color: #3f4850; font-size: 14px; }
+.eyebrow strong { color: #0f6b47; letter-spacing: .12em; }
+h1 { font-size: 24px; margin: 18px 0 12px; letter-spacing: -.04em; }
+#step-label { font-size: 14px; white-space: nowrap; }
+#progress { display: flex; gap: 6px; }
+#progress i { flex: 1; height: 6px; background: #d3e4fe; border-radius: 3px; }
+#progress i.active { background: #0f6b47; }
+.hint, small { color: #3f4850; font-size: 14px; }
+#cache-status { margin: 8px 0 18px; }
+.field, fieldset { margin: 0 0 16px; }
+label, legend { display: block; font-weight: 650; font-size: 18px; margin-bottom: 5px; }
+label small { font-weight: 400; }
+input, button { font: inherit; color: inherit; min-height: 52px; border: 2px solid #707881; border-radius: 5px; background: white; }
+input { padding: 10px 12px; width: 100%; min-width: 0; }
+input[readonly] { background: #e5eeff; font-weight: 700; }
+button { cursor: pointer; padding: 10px 15px; font-weight: 700; touch-action: manipulation; }
+button:active { background: #dae2fd; }
+:focus-visible { outline: 3px solid #004b73; outline-offset: 3px; }
+input[aria-invalid="true"] { border-color: #a21515; }
+fieldset { border: 0; padding: 0; min-width: 0; }
+legend { padding: 0; }
+.choices { display: flex; gap: 8px; }
+.choices label { position: relative; flex: 1; margin: 0; cursor: pointer; }
+.choices input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
+.choices span { display: flex; align-items: center; justify-content: center; min-height: 52px; border: 2px solid #707881; border-radius: 5px; background: white; padding: 10px; }
+.choices input:checked + span { border-color: #0f6b47; background: #d9f0e5; color: #084a31; box-shadow: inset 0 0 0 1px #0f6b47; }
+.choices input:focus-visible + span { outline: 3px solid #004b73; outline-offset: 3px; }
+.vertical { flex-direction: column; }
+.stepper { display: flex; gap: 8px; }
+.stepper button { flex: 0 0 56px; font-size: 26px; padding: 0; }
+.stepper input { text-align: center; font-size: 26px; font-weight: 700; appearance: textfield; }
+.stepper input::-webkit-inner-spin-button { appearance: none; }
+.actions { display: flex; gap: 8px; padding: 12px 0; position: sticky; bottom: 0; background: #f8f9ff; margin-top: 12px; }
+.primary { background: #0f6b47; color: white; border-color: #0f6b47; }
+.primary:active { background: #084a31; }
+.actions .primary { flex: 1; }
+.notice { padding: 10px; background: #ffddb8; color: #653e00; border-radius: 5px; }
+.error { color: #8b1111; background: #ffdad6; padding: 12px; border: 2px solid #a21515; }
+canvas { display: block; width: 100%; height: 190px; border: 2px solid #707881; border-radius: 5px; background: white; touch-action: none; cursor: crosshair; }
+#clear-signature { align-self: start; margin-top: 8px; }
+h2 { font-size: 21px; }
+dl { margin: 0; padding: 16px; border-radius: 5px; background: #e5eeff; }
+dt { font-size: 18px; font-weight: 700; }
+dd { margin: 0 0 12px; overflow-wrap: anywhere; }
+dd:last-child { margin-bottom: 0; }
+#queue { border-top: 1px solid #707881; margin-top: 18px; padding-top: 12px; }
+#queue article { border: 1px solid #707881; padding: 12px; border-radius: 5px; margin: 12px 0; background: white; overflow-wrap: anywhere; }
+#queue article p { margin: 0 0 10px; }
+.export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#confirmation { padding: 20px 0; }
+#confirmation .primary { width: 100%; }
+.success-mark { color: #0f6b47; font-size: 48px; }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color .12s; } }
+@media print { .actions, #queue, header { display: none; } }
+# Frigo
+
+Assistant local en trois étapes pour une fiche d’intervention de fluides frigorigènes. HTML, CSS et modules JavaScript natifs, sans dépendance, sans compilation, sans police distante.
+
+## Lancer
+
+Depuis la racine du dépôt :
+
+```sh
+python3 -m http.server 8080
+```
+
+Ouvrir **http://localhost:8080/**. Attendre « Disponible hors connexion sur cet appareil » avant de couper le réseau. Un premier chargement connecté est nécessaire. Le service worker exige localhost ou HTTPS : pour un téléphone accédant à une autre machine, un simple serveur HTTP sur le réseau local ne suffit pas.
+
+Aucune installation npm n’est nécessaire. Node.js 22 ou ultérieur permet de lancer les tests :
+
+```sh
+node --test
+```
+
+Les six tests couvrent les validations des étapes 1 et 2, le calcul arrondi, le stockage corrompu et la persistance, la stabilité du JSON BSFF et le document HTML signé (avec échappement des textes).
+
+## Utiliser et exporter
+
+1. Renseigner marque, modèle, fluide et charge totale strictement positive. Le numéro de série est facultatif ; les boutons − et + modifient la charge de 0,1 kg.
+2. Choisir l’opération, vérifier la date locale préremplie et renseigner les poids. La charge récupérée correspond à avant − après, avec deux décimales. La longueur de circuit est facultative.
+3. Indiquer le nom, tracer la signature au doigt, au stylet ou à la souris, vérifier le récapitulatif, puis choisir « Signer et enregistrer ».
+4. Après confirmation, commencer une nouvelle intervention. Les fiches en attente figurent en bas du premier écran et restent présentes après rechargement.
+
+Chaque fiche propose trois téléchargements utilisables hors ligne :
+
+- **Exporter JSON BSFF** : sous-ensemble de `BsffInput` contenant le type `COLLECTE_PETITES_QUANTITES`, la description du fluide et le poids récupéré en kilogrammes. Les clés et les valeurs sont déterministes et sans `undefined`.
+- **Document imprimable** : fichier HTML autonome contenant tous les champs, la référence, la date d’enregistrement et la signature PNG. Ouvrir le fichier téléchargé dans un navigateur puis utiliser sa commande Imprimer, éventuellement vers PDF. Il porte la mention « Document de travail — ne remplace pas le Cerfa officiel signé ».
+- **Sauvegarder la fiche** : JSON complet comprenant identifiant UUID v4, horodatage ISO, données saisies, signature PNG et statut `pending`.
+
+Le JSON BSFF suit les champs documentés dans la [référence officielle BsffInput de TrackDéchets](https://developers.trackdechets.beta.gouv.fr/reference/api-reference/bsff/inputObjects#bsffinput). Il reste **incomplet pour une transmission** : le formulaire ne collecte pas les acteurs (SIRET, coordonnées de l’émetteur, du transporteur, du destinataire), la classification du déchet, les références des bouteilles ou les identifiants TrackDéchets des fiches d’intervention. Ces informations ne sont pas inventées. Le JSON complet de la fiche conserve les informations locales pour une future intégration.
+
+## Stockage et fonctionnement hors ligne
+
+Les fiches sont enregistrées dans `localStorage`, sous la clé `frigo.interventions.v1`. Un JSON illisible est toléré et donne une file vide. Les erreurs d’écriture sont signalées sans confirmer un enregistrement ni effacer le formulaire. La signature reste disponible pour une nouvelle tentative tant que la page reste ouverte. Les saisies non enregistrées ne survivent pas au rechargement.
+
+Le stockage appartient au navigateur et à l’origine (protocole, hôte et port). Le vider ou utiliser un autre appareil ne permet pas de retrouver les fiches. Exporter régulièrement les fiches complètes pour les sauvegarder. Les données et signatures ne sont pas chiffrées par l’application.
+
+Le cache contient uniquement l’app shell. `sw.js`, à la racine, charge `js/sw.js` : ce lanceur est nécessaire pour contrôler toute l’application sans en-tête HTTP spécial avec `python3 -m http.server`. Le service worker ne traite que les ressources statiques de cette application. Pour déployer une nouvelle version, incrémenter `CACHE_NAME` dans `js/sw.js` ; l’installation prépare le nouveau cache complet, attend la fermeture des anciens onglets, puis supprime les anciens caches Frigo lors de l’activation. Aucun rechargement forcé ne coupe une saisie en cours.
+
+## Ce qui n’est pas fait
+
+- Aucun backend, compte, jeton, appel API TrackDéchets, envoi automatique ou synchronisation entre appareils. Le retour du réseau masque le bandeau hors connexion mais laisse les fiches en attente.
+- Aucun Cerfa officiel rempli ou PDF réglementaire, aucune signature électronique certifiée, aucune validation juridique du document de travail.
+- Aucune importation des sauvegardes et aucune suppression des fiches dans l’interface.
+- Aucun enregistrement automatique des brouillons.
+
+## Definition of Done — vérification
+
+Vérifications effectuées avec Node.js 26.7.0 et Chromium 155 en mode headless :
+
+- [x] `node --test` : six tests, six réussites, zéro échec.
+- [x] Application servie par `python3 -m http.server 8080` ; premier chargement, installation du cache, rechargement avec réseau désactivé, puis parcours complet des trois étapes et signature avec de véritables événements pointeur. Vérification à 390 × 844, sans débordement horizontal.
+- [x] Enregistrement signé dans `frigo.interventions.v1`, puis rechargement hors ligne : fiche conservée et « 1 intervention en attente » visible sur le premier écran.
+- [x] Aucune erreur console ni exception JavaScript au chargement ou pendant ce parcours. Refus de stockage simulé : erreur affichée, saisie conservée, aucune confirmation trompeuse.
+- [x] Code inspecté : aucun marqueur de travail restant ni fonction vide. `design-ref/` et `design/` n’ont pas été modifiés.
+
+Les contrôles de saisie et boutons ont au moins 52 px de hauteur, les libellés principaux 18 px, les couleurs de texte sont contrastées et le focus est visible. Les boutons d’incrémentation portent un nom accessible.
+
+Restent à vérifier sur matériel réel : installation PWA selon le navigateur, Safari/iOS et Firefox, signature tactile avec gants, lisibilité au soleil, audit complet au lecteur d’écran, impression physique et cycle de mise à jour entre deux versions déployées. Le fonctionnement hors ligne et la persistance ont été vérifiés dans Chromium, pas sur ces autres environnements.
+?? codex2.log
+
+EXIT=0
